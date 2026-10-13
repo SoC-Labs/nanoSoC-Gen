@@ -1,0 +1,117 @@
+//-----------------------------------------------------------------------------
+// Performance-Probe Harness ({{ module_name }})
+//
+// Contributors
+//
+// David Mapstone (d.a.mapstone@soton.ac.uk)
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Source:    {{ source_yaml }}
+// Template:  {{ template_name }}
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+// Passive performance-monitor harness for interconnect {{ interconnect_name }}.
+// Wraps {{ n_probes }} ahb_perf_probe tap(s) (inputs only — cannot perturb the
+// monitored buses) plus one ahb_perf_probe_regs read-out slave (Option B:
+// live counters, firmware-coherent reads, no shadow). Presents a single
+// 32-bit AHB-Lite slave (the read-out, a matrix target) plus one tap-input
+// group per probed port.
+//
+// Probe order (matches the read-out per-probe banks at 0x40 + n*0x20):
+{% for p in probes %}
+//   probe {{ loop.index0 }}: {{ p.label }} ({{ 'initiator' if p.is_initiator else 'target' }})
+{% endfor %}
+//-----------------------------------------------------------------------------
+
+module {{ module_name }} (
+    input  wire        HCLK,
+    input  wire        HRESETn,
+
+    // -- AHB-Lite read-out slave (matrix target; 32-bit, matches regs block) --
+    input  wire        HSEL,
+    input  wire [31:0] HADDR,
+    input  wire  [1:0] HTRANS,
+    input  wire  [2:0] HSIZE,
+    input  wire  [2:0] HBURST,
+    input  wire  [3:0] HPROT,
+    input  wire        HMASTLOCK,
+    input  wire        HWRITE,
+    input  wire        HREADY,
+    input  wire [31:0] HWDATA,
+    output wire        HREADYOUT,
+    output wire [31:0] HRDATA,
+    output wire        HRESP,
+
+    // -- passive tap inputs, one group per probed port --
+{% for p in probes %}
+    input  wire        m{{ loop.index0 }}_hsel,    // {{ p.label }}
+    input  wire  [1:0] m{{ loop.index0 }}_htrans,
+    input  wire        m{{ loop.index0 }}_hready,
+    input  wire        m{{ loop.index0 }}_hwrite{{ ',' if not loop.last else '' }}
+{% endfor %}
+);
+
+    localparam CW       = {{ cw }};
+    localparam N_PROBES = {{ n_probes }};
+
+    wire                  probe_clr;
+    wire [N_PROBES*CW-1:0] cyc_bus, xfer_rd_bus, xfer_wr_bus,
+                           wait_bus, busy_max_bus, grant_lost_bus;
+
+{% for p in probes %}
+    // ---- probe {{ loop.index0 }}: {{ p.label }} ({{ 'initiator' if p.is_initiator else 'target' }}) ----
+    wire [CW-1:0] p{{ loop.index0 }}_cyc, p{{ loop.index0 }}_rd, p{{ loop.index0 }}_wr,
+                  p{{ loop.index0 }}_wait, p{{ loop.index0 }}_bmax, p{{ loop.index0 }}_glost;
+    ahb_perf_probe #(.IS_INITIATOR({{ p.is_initiator }}), .CW(CW)) u_probe_{{ p.label }} (
+        .HCLK       (HCLK),
+        .HRESETn    (HRESETn),
+        .mon_hsel   (m{{ loop.index0 }}_hsel),
+        .mon_htrans (m{{ loop.index0 }}_htrans),
+        .mon_hready (m{{ loop.index0 }}_hready),
+        .mon_hwrite (m{{ loop.index0 }}_hwrite),
+        .clr        (probe_clr),
+        .cyc        (p{{ loop.index0 }}_cyc),
+        .xfer_rd    (p{{ loop.index0 }}_rd),
+        .xfer_wr    (p{{ loop.index0 }}_wr),
+        .wait_cnt   (p{{ loop.index0 }}_wait),
+        .busy_max   (p{{ loop.index0 }}_bmax),
+        .grant_lost (p{{ loop.index0 }}_glost)
+    );
+    assign cyc_bus       [{{ loop.index0 }}*CW +: CW] = p{{ loop.index0 }}_cyc;
+    assign xfer_rd_bus   [{{ loop.index0 }}*CW +: CW] = p{{ loop.index0 }}_rd;
+    assign xfer_wr_bus   [{{ loop.index0 }}*CW +: CW] = p{{ loop.index0 }}_wr;
+    assign wait_bus      [{{ loop.index0 }}*CW +: CW] = p{{ loop.index0 }}_wait;
+    assign busy_max_bus  [{{ loop.index0 }}*CW +: CW] = p{{ loop.index0 }}_bmax;
+    assign grant_lost_bus[{{ loop.index0 }}*CW +: CW] = p{{ loop.index0 }}_glost;
+
+{% endfor %}
+    // ---- read-out slave ({{ readout.instance_name }}) ----
+    ahb_perf_probe_regs #(.N_PROBES(N_PROBES), .CW(CW)) {{ readout.instance_name }} (
+        .HCLK           (HCLK),
+        .HRESETn        (HRESETn),
+        .HSEL           (HSEL),
+        .HADDR          (HADDR),
+        .HTRANS         (HTRANS),
+        .HSIZE          (HSIZE),
+        .HBURST         (HBURST),
+        .HPROT          (HPROT),
+        .HMASTLOCK      (HMASTLOCK),
+        .HWRITE         (HWRITE),
+        .HREADY         (HREADY),
+        .HWDATA         (HWDATA),
+        .HREADYOUT      (HREADYOUT),
+        .HRDATA         (HRDATA),
+        .HRESP          (HRESP),
+        .probe_clr      (probe_clr),
+        .cyc_bus        (cyc_bus),
+        .xfer_rd_bus    (xfer_rd_bus),
+        .xfer_wr_bus    (xfer_wr_bus),
+        .wait_bus       (wait_bus),
+        .busy_max_bus   (busy_max_bus),
+        .grant_lost_bus (grant_lost_bus)
+    );
+
+endmodule

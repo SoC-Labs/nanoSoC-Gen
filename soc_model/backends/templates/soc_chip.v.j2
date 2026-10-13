@@ -1,0 +1,264 @@
+//-----------------------------------------------------------------------------
+// {{ module_name }} Chip-level File
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Template:  soc_chip.v.j2
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+module {{ module_name }} #(
+  parameter integer FT1248_WIDTH = 1, // Only 1-bit serial supported for min pincount
+  parameter integer GPIO_TIO	 = 4 // reconfigure lowest four GPIO ports for test
+)(
+`ifdef POWER_PINS
+  inout  wire          VDD,
+  inout  wire          VSS,
+  inout  wire          VDDACC,
+`endif
+  input  wire                diag_mode,
+  input  wire                diag_ctrl,
+  input  wire                scan_mode,
+  input  wire                scan_enable,
+  input  wire [GPIO_TIO-1:0] scan_in,     // soc test scan chain inputs
+  output wire [GPIO_TIO-1:0] scan_out,    // soc test scan chain outputs
+  input  wire                bist_mode,
+  input  wire                bist_enable,
+  input  wire [GPIO_TIO-1:0] bist_in,     // soc bist control inputs
+  output wire [GPIO_TIO-1:0] bist_out,    // soc test status outputs
+  input  wire                alt_mode,    // ALT MODE = UART
+  input  wire                uart_rxd_i,  // UART RXD
+  output wire                uart_txd_o,  // UART TXD
+  input  wire                swd_mode,    // SWD mode
+  input  wire          clk_i,
+  input  wire          test_i,
+  input  wire          nrst_i,
+{% for port in gpio_ports %}
+  input  wire  [{{ port.width - 1 }}:0]  {{ port.name | lower }}_i, // level-shifted input from pad
+  output wire  [{{ port.width - 1 }}:0]  {{ port.name | lower }}_o, // output port drive
+  output wire  [{{ port.width - 1 }}:0]  {{ port.name | lower }}_e, // active high output drive enable (pad tech dependent)
+  output wire  [{{ port.width - 1 }}:0]  {{ port.name | lower }}_z, // active low output drive enable (pad tech dependent)
+{% endfor %}
+{% for port in dap_ports %}
+  {{ '%-6s'|format(port.direction) }} wire          {{ port.name }},  // CoreSight SWJ-DAP boundary -- plain chip port for the FPGA debug flow
+{% endfor %}
+{% for grp in passthrough_groups %}
+{% for port in grp.ports %}
+  {{ '%-6s'|format(port.direction) }} wire  {{ '%-7s'|format(port.range) }} {{ port.name }},  // {{ grp.label }} boundary -- {{ grp.note }}
+{% endfor %}
+{% endfor %}
+  input  wire          swdio_i, // alternate test clock control
+  output wire          swdio_o,
+  output wire          swdio_e,
+  output wire          swdio_z,
+  input  wire          swdclk_i // alternate test scan enable
+);
+
+  //--------------------------
+  // Power Supply Tie-offs (non-ASIC)
+  //--------------------------
+`ifndef POWER_PINS
+  supply1 VDD;
+  supply1 VDDACC;
+  supply0 VSS;
+`endif
+
+  //--------------------------
+  // System Wiring
+  //--------------------------
+  // Free-running and Crystal Clock Output
+  wire                     SYS_CLK;              // System Input Clock
+  wire                     PLL_CLK;              // Phase-Locked Loop Clock
+  wire                     SYS_XTALCLK_OUT;      // Crystal Clock Output
+
+  // Scan Wiring
+  wire                     SYS_SCANENABLE;      // Scan Mode Enable
+  wire                     SYS_TESTMODE;        // Test Mode Enable (Override Synchronisers)
+  wire                     SYS_SCANINHCLK;      // HCLK scan wire - TIE OFF
+  wire                     SYS_SCANOUTHCLK;     // Scan Chain Output - UNUSED
+
+{% for swd in swd_ports %}
+  // Serial-Wire Debug
+  wire                     {{ (swd.swdi ~ ';').ljust(20) }}// SWD data input
+  wire                     {{ (swd.swclk ~ ';').ljust(20) }}// SWD clock
+  wire                     {{ (swd.swdo ~ ';').ljust(20) }}// SWD data output
+  wire                     {{ (swd.swdoen ~ ';').ljust(20) }}// SWD data enable
+
+{% endfor %}
+  // GPIO
+{% for port in gpio_ports %}
+  wire              [{{ port.width - 1 }}:0] {{ port.name }}_IN;            // GPIO {{ port.name }} inputs
+  wire              [{{ port.width - 1 }}:0] {{ port.name }}_OUT;           // GPIO {{ port.name }} outputs
+  wire              [{{ port.width - 1 }}:0] {{ port.name }}_OUTEN;         // GPIO {{ port.name }} output enables
+
+{% endfor %}
+  //--------------------------
+  // FPGA-Specific Wiring - Should be own Module
+  //--------------------------
+
+  // Technology-specific PLL/Frequecy synthesizer would generate
+  //   CLK, FCLK (Free running system clock)
+  // from
+  //    clk_i
+
+  assign PLL_CLK    = clk_i; // Default to no PLL
+
+  assign SYS_SCANENABLE   = scan_enable;
+  assign SYS_TESTMODE     = scan_mode;
+  assign SYS_SCANINHCLK   = 1'b1;
+  assign bist_out         = bist_in;
+
+  //--------------------------
+  // Clock Wiring
+  //--------------------------
+
+  assign SYS_CLK    = (SYS_TESTMODE) ? clk_i : PLL_CLK;
+
+{% if swd_ports %}
+  //--------------------------
+  // SWD Wiring
+  //--------------------------
+
+{% for swd in swd_ports %}
+{% if swd.to_pads %}
+  assign {{ swd.swclk.ljust(swd.lhs_w) }} = swdclk_i;
+  assign {{ swd.swdi.ljust(swd.lhs_w) }} = swdio_i;
+  assign {{ 'swdio_o'.ljust(swd.lhs_w) }} = {{ swd.swdo }};
+  assign {{ 'swdio_e'.ljust(swd.lhs_w) }} = {{ swd.swdoen }};
+  assign {{ 'swdio_z'.ljust(swd.lhs_w) }} = !{{ swd.swdoen }};
+{% else %}
+  // {{ swd.name }}: no second SWDIO/SWDCLK pad pair on this chip -- held idle
+  assign {{ swd.swclk.ljust(swd.lhs_w) }} = 1'b0;
+  assign {{ swd.swdi.ljust(swd.lhs_w) }} = 1'b0;
+{% endif %}
+
+{% endfor %}
+{% else %}
+  //--------------------------
+  // Legacy SWDIO/SWDCK pads (retained, inert)
+  //--------------------------
+  // Debug now leaves the die through the dap_* group (passed straight to the
+  // system for the FPGA flow). The legacy SWDIO/SWDCK bond-out pads are kept so
+  // the pad ring is unchanged, but they are no longer on the debug path: hold
+  // the SWDIO pad output disabled (Hi-Z); swd_mode/swdio_i/swdclk_i idle.
+
+  assign swdio_o     = 1'b0;
+  assign swdio_e     = 1'b0;
+  assign swdio_z     = 1'b1;
+
+{% endif %}
+  //--------------------------
+  // PIO pad control
+  //--------------------------
+
+{% for port in gpio_ports %}
+  assign {{ port.name }}_IN = {{ port.name | lower }}_i;
+  assign {{ port.name | lower }}_o  = {{ port.name }}_OUT;
+  assign {{ port.name | lower }}_e  = {{ port.name }}_OUTEN;
+  assign {{ port.name | lower }}_z  = ~{{ port.name }}_OUTEN;
+
+{% endfor %}
+{% if dma_type_params %}
+  //--------------------------
+  // DMA Controller Type Selection
+  //--------------------------
+  // These MUST track {{ dma_type_params | map(attribute='name') | join(' / ') }} in
+  // build_soc/rtl/{{ core_module_name }}_soc_config_pkg.sv (generated from the YAML).
+  // They are resolved here as Verilog-2001 localparams rather than as
+  // package-scope references into {{ core_module_name }}_soc_config_pkg because:
+  //   1. {{ core_module_name }}_soc_config_pkg.sv is only in the TESTBENCH filelist
+  //      ({{ core_module_name }}_tb.flist), not in the design filelist ({{ core_module_name }}_ip.flist),
+  //      so the package is simply not visible to any non-simulation flow; and
+  //   2. Vivado's IP packager parses this .v top as Verilog-2001 and rejects
+  //      the SystemVerilog scope-resolution operator outright
+  //      (HDL 9-1206 / IP_Flow 19-259).
+  // Defaults are {{ dma_defaults_desc }}, matching the YAML for this SoC; the defines
+  // below keep the same override mechanism as chip/chip/verilog/{{ core_module_name }}_chip.v.
+{% for p in dma_type_params %}
+{% if p.defines %}
+{% for d in p.defines %}
+`{{ 'ifdef' if loop.first else 'elsif' }} {{ d.macro }}
+  localparam {{ p.cfg }} = {{ d.value }};  // {{ d.label }}
+{% endfor %}
+`else
+  localparam {{ p.cfg }} = {{ p.default }};  // {{ p.default_label }}
+`endif
+{% else %}
+  localparam {{ p.cfg }} = {{ p.default }};  // {{ p.default_label }}
+{% endif %}
+
+{% endfor %}
+{% endif %}
+{% if mem_width_params %}
+  //--------------------------
+  // Memory Sizes
+  //--------------------------
+  // Every memory address width {{ system_module_name }} declares, set on u_system.
+  // {{ system_module_name }} hands each one on to the core and to its memory region,
+  // so these values, not any module default, size the memories the RTL
+  // elaborates -- the same sizes the firmware is linked for (build_soc/firmware/)
+  // and {{ core_module_name }}_soc_config_pkg.sv states.
+{% for p in mem_width_params %}
+  localparam {{ p.cfg }} = {{ p.value }};  // {{ p.source }}{% if p.value != p.system_default %}; {{ system_module_name }} YAML default {{ p.system_default }}{% endif %}
+
+{% endfor %}
+
+{% endif %}
+  //--------------------------
+  // System Instantiation
+{% if not dma_type_params and not mem_width_params %}
+{# Kept verbatim on the no-DMAC-param path so existing consumers' output stays byte-identical. #}
+  // DMA type and other design parameters are sourced from the config package.
+{% endif %}
+  //--------------------------
+
+  {{ system_module_name }}{% if system_param_overrides %} #(
+{% for p in system_param_overrides %}
+      .{{ p.name }}({{ p.cfg }}){{ ',' if not loop.last else '' }}
+{% endfor %}
+  ){% endif %} u_system (
+      // Free-running and Crystal Clock Output
+      .SYS_CLK(SYS_CLK),
+      .SYS_XTALCLK_OUT(SYS_XTALCLK_OUT),
+      .SYS_SYSRESETn(nrst_i),
+
+      // Scan Wiring
+      .SYS_SCANENABLE(SYS_SCANENABLE),
+      .SYS_TESTMODE(SYS_TESTMODE),
+      .SYS_SCANINHCLK(SYS_SCANINHCLK),
+      .SYS_SCANOUTHCLK(SYS_SCANOUTHCLK),
+
+{% if dap_ports %}
+      // CoreSight SWJ-DAP boundary (passed straight through)
+{% for port in dap_ports %}
+      .{{ port.name }}({{ port.name }}),
+{% endfor %}
+{% endif %}
+{% for grp in passthrough_groups %}
+      // {{ grp.label }} boundary (passed straight through)
+{% for port in grp.ports %}
+      .{{ port.name }}({{ port.name }}),
+{% endfor %}
+{% endfor %}
+{% for swd in swd_ports %}
+      // Serial-Wire Debug
+      .{{ swd.swdi }}({{ swd.swdi }}),
+      .{{ swd.swclk }}({{ swd.swclk }}),
+      .{{ swd.swdo }}({{ swd.swdo }}),
+      .{{ swd.swdoen }}({{ swd.swdoen }}),
+
+{% endfor %}
+      // GPIO
+{% for port in gpio_ports %}
+      .{{ port.name }}_IN({{ port.name }}_IN),
+      .{{ port.name }}_OUT({{ port.name }}_OUT),
+{% if not loop.last %}
+      .{{ port.name }}_OUTEN({{ port.name }}_OUTEN),
+{% else %}
+      .{{ port.name }}_OUTEN({{ port.name }}_OUTEN)
+{% endif %}
+{% endfor %}
+  );
+
+endmodule

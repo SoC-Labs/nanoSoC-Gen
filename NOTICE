@@ -1,0 +1,35 @@
+nanoSoC generator (nanosoc_gen)
+Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Arm IP is NOT included
+----------------------
+This repository contains no Arm intellectual property. The Arm Cortex-M
+processors, the Cortex-M0 DesignStart/Quickstart deliverable, the Arm CMSDK
+components (Corstone-101), the bus-matrix generator BuildBusMatrix.pl and its
+templates, and the DMA-250 generator are not part of this product and are not
+licensed by it. You obtain them yourself, from Arm, under Arm's own licence
+terms, and point the generator at your copy (ARM_IP_LIBRARY_PATH,
+ARM_CORSTONE_101_DIR; see README.md). Nothing in the Apache License grants any
+right to Arm IP. Names such as "cmsdk_*", "BuildBusMatrix" or "DMA-250" in this
+repository refer to Arm components by name only.
+
+Foundry pad data is NOT included
+--------------------------------
+Foundry pad-cell names, port maps and pin maps are not part of this product.
+They are kept in separate pad packs, loaded by path (--pad-tech-dir,
+NANOSOC_PAD_TECH_DIR; see soc_model/pad_packs.py). The bundled example pad
+technology "generic" uses the SoC Labs generic library pad models.
+
+Generated files
+---------------
+Files that the generator writes from your system descriptions are your work:
+this licence does not restrict how you use, license or distribute them. They
+carry a SoC Labs Apache-2.0 header because the generator's templates do; you
+may keep, change or replace that header in your output.
+
+The generator can run third-party tools on your behalf (PeakRDL-regblock,
+systemrdl-compiler, and, when you supply them, Arm's BuildBusMatrix.pl and the
+DMA-250 generator). They are not included; their output is governed by their
+own licences.

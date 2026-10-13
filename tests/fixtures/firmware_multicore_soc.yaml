@@ -1,0 +1,150 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Hierarchical multi-initiator firmware fixture. Exercises the parts of the
+# firmware backend that the single-CPU firmware_soc.yaml does NOT reach:
+#
+#   * _stitch_module recursion + bridge-merge (firmware.py 261-264, 281-343):
+#     the parent matrix has a bridge initiator (eth_ss_m) whose `instance`
+#     is the eth_subsystem; the subsystem's internal CPU (ss_cpu_m) carries
+#     IMEM alias + BOOTROM remap windows that get folded into eth_ss_m's view.
+#   * a SECOND top-level interconnect reusing the `cpu_m` initiator name so the
+#     same-name merge branch (226-230) runs.
+#   * _resolve_address alias / remapped windows (411,416,423,429,436-441) via
+#     linker profiles that select address_select: alias and remapped.
+#   * makefile hex_adjust + adp blocks (594-595,616-623,633-634).
+#
+# CPU initiator for the firmware section is the bridge initiator eth_ss_m, so
+# its linker profiles resolve against the folded subsystem regions.
+
+module:
+  name: firmware_multicore_soc
+  gen: True
+  desc: >
+    Multicore firmware fixture: a parent AHB matrix feeding a CPU subsystem
+    (eth_subsystem) over a bridge initiator, plus a shared peripheral region.
+
+  params:
+    SYS_CLK_FREQ_HZ:   { type: int, default: 50000000, desc: "System clock (50 MHz)" }
+    SYS_ADDR_W:        { type: int, default: 32, desc: "System address width" }
+    SYS_DATA_W:        { type: int, default: 32, desc: "System data width" }
+    SHARED_RAM_ADDR_W: { type: int, default: 13, desc: "Shared RAM width (8 KB)" }
+
+  clocks:
+    - { name: sys_hclk, source: external, desc: "AHB clock" }
+
+  resets:
+    - { name: sys_hresetn, active: low, source: external, desc: "AHB reset" }
+
+  interfaces:
+    - { name: sys_hclk,    type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB clock in" }
+    - { name: sys_hresetn, type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB reset in" }
+
+  instances:
+    - instance_name: u_eth_ss_0
+      module: eth_subsystem
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W }
+      connections:
+        - { port: HCLK,     conn: sys_hclk }
+        - { port: HRESETn,  conn: sys_hresetn }
+        # Bridge boundary: the parent matrix initiator eth_ss_m drives this.
+        - { port: eth_ss_m, conn: parent_ahb_interconnect.eth_ss_m }
+
+    - instance_name: u_shared_ram_0
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $SHARED_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: parent_ahb_interconnect.shared_ram_0 }
+
+    - instance_name: u_periph_0
+      module: tiny_apb_periph
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: parent_ahb_interconnect.periph_0 }
+
+  interconnects:
+    - name: parent_ahb_interconnect
+      gen: True
+      type: ahb_lite
+      desc: "Parent AHB-Lite matrix: CPU + subsystem bridge + shared RAM"
+      params:
+        SYS_ADDR_W: $SYS_ADDR_W
+        SYS_DATA_W: $SYS_DATA_W
+      connections:
+        - { port: sys_hclk,    conn: sys_hclk }
+        - { port: sys_hresetn, conn: sys_hresetn }
+      targets:
+        # The subsystem boundary, reached over the eth_ss_m bridge initiator.
+        - { name: eth_ss_0,    instance: u_eth_ss_0,    base: 0x40000000, size: 0x10000000, phys_size: 0x00010000, sw_access: rwx, region_type: memory, role: None, desc: "Eth subsystem window" }
+        - { name: shared_ram_0, instance: u_shared_ram_0, base: 0x18000000, size: 0x08000000, phys_size: "2 ** $SHARED_RAM_ADDR_W", sw_access: rwx, region_type: memory, role: None, desc: "Shared RAM" }
+        # 'periph' region_type exercises the _derive_memory_regions periph ->
+        # peripheral normalisation (firmware.py 369-373).
+        - { name: periph_0,    instance: u_periph_0,    base: 0x4000C000, size: 0x00001000, phys_size: 0x00001000, sw_access: rw, region_type: periph, role: peripheral, desc: "APB peripheral block" }
+      initiators:
+        # Plain top-level CPU initiator.
+        - name: cpu_m
+          targets:
+            - name: eth_ss_0
+            - name: shared_ram_0
+            - name: periph_0
+        # Bridge initiator: routes into the eth_subsystem instance. Its
+        # `instance` + the instance's eth_ss_m connection make _stitch_module
+        # fold the subsystem's internal IMEM/BOOTROM regions into this view.
+        - name: eth_ss_m
+          instance: u_eth_ss_0
+          targets:
+            - name: eth_ss_0
+            - name: shared_ram_0
+            - name: periph_0
+
+    # SECOND top-level interconnect that re-uses the `cpu_m` initiator name so
+    # the same-name merge branch (firmware.py 226-230) executes.
+    - name: aux_ahb_interconnect
+      gen: True
+      type: ahb_lite
+      desc: "Aux matrix that also exposes a cpu_m initiator (same-name merge)"
+      params:
+        SYS_ADDR_W: $SYS_ADDR_W
+        SYS_DATA_W: $SYS_DATA_W
+      connections:
+        - { port: sys_hclk,    conn: sys_hclk }
+        - { port: sys_hresetn, conn: sys_hresetn }
+      targets:
+        - { name: shared_ram_0, instance: u_shared_ram_0, base: 0x18000000, size: 0x08000000, phys_size: "2 ** $SHARED_RAM_ADDR_W", sw_access: rwx, region_type: memory, role: None, desc: "Shared RAM (aux view)" }
+      initiators:
+        - name: cpu_m
+          targets:
+            - name: shared_ram_0
+
+  # =============================================================================
+  # Firmware Configuration (CPU = the bridge initiator eth_ss_m)
+  # =============================================================================
+  firmware:
+    cpu: cortex-m0plus
+    cpu_initiator: eth_ss_m
+
+    linker_profiles:
+      # App in the subsystem IMEM at its ALIAS window (0x00000000), with a
+      # custom linker_name + software_access override.
+      - name: app_alias
+        regions:
+          - { target: ss_imem_0, address_select: alias, linker_name: APP_IMEM, software_access: rwx }
+          - { target: ss_bootrom_0, address_select: default }
+      # Boot image in the REMAPPED BOOTROM overlay.
+      - name: boot_remap
+        regions:
+          - { target: ss_bootrom_0, address_select: remapped }
+
+    # hex_adjust exercises the makefile hex_adjust loop (firmware.py 616-623).
+    hex_adjust:
+      imem_alias:   { target: ss_imem_0, address_select: alias }
+      boot_default: { target: ss_bootrom_0, address_select: default }
+
+    adp:
+      upload_target: ss_imem_0
+      address_select: alias

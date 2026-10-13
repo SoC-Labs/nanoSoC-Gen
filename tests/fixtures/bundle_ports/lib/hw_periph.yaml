@@ -1,0 +1,12 @@
+# Hand-written RTL module (gen: False). Its interfaces are declared as bundles,
+# but the RTL ports are the upper-case names a parent connects to.
+module:
+  name: hw_periph
+  gen: False
+  interfaces:
+    - { name: HCLK,      type: wire,      direction: in,     params: { WIDTH: 1 } }
+    - { name: USRT0_TXD, type: axis_byte, direction: out,    params: {} }   # RTL: USRT0_TXD_TVALID/TDATA/TREADY
+    - { name: P0,        type: gpio,      direction: inout,  params: { WIDTH: 16 } }   # RTL: P0_IN/P0_OUT/P0_OUTEN
+    - { name: DEBUG_APB, type: apb,       direction: target, params: { ADDR_WIDTH: 10, DATA_WIDTH: 32 } }  # RTL: DEBUG_PSEL/PADDR/...
+    - { name: txd,       type: axis_byte, direction: out,    params: {} }   # RTL also has txd_tlast
+    - { name: ADP_RXD,   type: axis_byte, direction: out,    params: {} }   # RTL: ADP_RXD_TVALID_o/TDATA_o, ADP_RXD_TREADY_i

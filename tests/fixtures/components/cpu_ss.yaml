@@ -1,0 +1,9 @@
+component:
+  id: cpu_subsystem
+  module: tiny_cpu_ss
+  category: cpu
+  label: "CPU Subsystem"
+  desc: "A CPU core with its own internal bus and memory."
+  knobs:
+    - { param: IMEM_RAM_ADDR_W, label: "Instruction memory", kind: addr_w,
+        default: 12, min: 11, max: 15 }

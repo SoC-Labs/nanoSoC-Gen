@@ -1,0 +1,36 @@
+# Auto-generated memory map variables
+# Source:    {{ source_yaml }}
+# Generated: {{ generated_date }}
+#
+# DO NOT EDIT — regenerate with gen_firmware_config.py
+
+{% if cpu %}
+# Default target CPU for this SoC (used as fallback when NANOSOC_CPU is not
+# passed explicitly on the make command line; see build/testcode.mk).
+NANOSOC_DEFAULT_CPU := {{ cpu }}
+
+{% endif %}
+# Memory region base addresses and sizes
+{% for r in region_vars %}
+{{ r.var_name }}_BASE  = {{ r.base }}
+{{ r.var_name }}_SIZE  = {{ r.size }}
+{% endfor %}
+
+# Per-profile linker bases (for ARM linker --ro_base / --rw_base)
+{% for pname, pv in profile_vars.items() %}
+{{ pname | upper }}_RO_BASE = {{ pv.ro_base }}
+{{ pname | upper }}_RW_BASE = {{ pv.rw_base }}
+{% endfor %}
+
+# objcopy --adjust-vma values
+{% for adj_name, adj_val in hex_adjust.items() %}
+{{ adj_name | upper }}_ADJUST_VMA = {{ adj_val }}
+{% endfor %}
+
+# ARM linker options (ds5/ds6)
+{% for pname, pv in profile_vars.items() %}
+ARM_LINK_OPTIONS_{{ pname | upper }} = --rw_base $({{ pname | upper }}_RW_BASE) --ro_base $({{ pname | upper }}_RO_BASE) --map
+{% endfor %}
+
+# ADP upload address
+ADP_UPLOAD_ADDRESS = {{ adp_upload_address }}

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<!-- Copyright 2026, SoC Labs (www.soclabs.org)
+     nanoSoC Configurator shell (roadmap doc 06a). A dynamic LEFT SIDEBAR (vibrant
+     theme) replaces the old grey top tabs. Panels are still <section
+     id="panel-X"> elements toggled by static/js/core.js; core.js renders the
+     sidebar nav from a small JS config and drives App.show(id). -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>nanoSoC Configurator</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <div class="shell">
+    <!-- ===================== LEFT SIDEBAR ===================== -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sb-brand">
+        <span class="sb-mark" aria-hidden="true">◆</span>
+        <span class="sb-word">nanoSoC&nbsp;Configurator</span>
+      </div>
+
+      <!-- core.js renders grouped nav items into here from NAV config -->
+      <nav class="sb-nav" id="sb-nav" aria-label="Panels"></nav>
+
+      <div class="sb-foot">
+        <span class="draft-pill" id="topbar-draft" hidden></span>
+        <div class="sb-env">
+          <span class="env-dot" id="env-dot" aria-hidden="true"></span>
+          <span class="health" id="env-health" title="environment health">env: …</span>
+        </div>
+        <div class="sb-proj" id="proj-label" title="{{ project.top_yaml or project.root }}">{{ project.top_yaml or project.root }}</div>
+      </div>
+
+      <button class="sb-collapse" id="sb-collapse" type="button"
+              title="Collapse sidebar" aria-label="Collapse sidebar">
+        <span class="sb-collapse-ico" aria-hidden="true">‹</span>
+      </button>
+    </aside>
+
+    <!-- ===================== MAIN CONTENT ===================== -->
+    <main>
+      <section id="panel-builder" class="panel">
+        <div id="builder-root"><!-- builder.js renders the wizard here --></div>
+      </section>
+
+      <section id="panel-yaml" class="panel" hidden>
+        <div class="cols">
+          <div class="col editor-col">
+            <div class="row">
+              <select id="draft-select"></select>
+              <button id="draft-new">New from template…</button>
+              <button id="draft-from-top">Load project top</button>
+              <span id="save-state" class="dim"></span>
+            </div>
+            <textarea id="yaml-text" spellcheck="false"
+                      placeholder="module:&#10;  name: my_soc&#10;  gen: True"></textarea>
+          </div>
+          <div class="col side-col">
+            <h3>Validation <span id="val-counts"></span></h3>
+            <ul id="messages" class="messages"></ul>
+            <h3>System completeness <span id="check-counts"></span></h3>
+            <ul id="checklist" class="checklist"></ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-compose" class="panel" hidden>
+        <div id="compose-root"><!-- compose.js renders forms here --></div>
+      </section>
+
+      <section id="panel-irqmap" class="panel" hidden>
+        <div id="irqmap-root"><!-- irqmap.js renders the IRQ matrix here --></div>
+      </section>
+
+      <section id="panel-compare" class="panel" hidden>
+        <div id="compare-root"><!-- compare.js renders the A/B draft compare here --></div>
+      </section>
+
+      <section id="panel-canvas" class="panel" hidden>
+        <div id="canvas-root"><!-- canvas.js renders the drag-and-drop SoC canvas here --></div>
+      </section>
+
+      <section id="panel-diagram" class="panel" hidden>
+        <div id="diagram-root"><!-- diagram.js renders the SVG here --></div>
+      </section>
+
+      <section id="panel-memmap" class="panel" hidden>
+        <div id="memmap-root"><!-- memmap.js renders rulers here --></div>
+      </section>
+
+      <section id="panel-build" class="panel" hidden>
+        <div class="row">
+          <label><input type="checkbox" class="stage" value="validate" checked> validate</label>
+          <label><input type="checkbox" class="stage" value="soc" checked> generate (make soc)</label>
+          <label><input type="checkbox" class="stage" value="firmware"> firmware</label>
+          <button id="build-run">Run</button>
+          <button id="build-cancel">Cancel</button>
+          <span id="build-status" class="dim">idle</span>
+        </div>
+        <details id="build-overrides" class="ovr">
+          <summary>parameter overrides (advanced)</summary>
+          <p class="ovr-note">Overrides change the generated memmap / linker /
+             aperture numbers via <code>--config-override</code> — <b>not</b> the
+             RTL's physical storage sizes. Shrinking a memory width here without
+             re-generating/re-synthesising the macros is a silent mismatch.</p>
+          <div id="override-list" class="ovr-list">
+            <span class="dim">open a draft to edit its params</span></div>
+        </details>
+        <div id="stage-chips" class="row"></div>
+        <pre id="build-log" class="log"></pre>
+      </section>
+
+      <section id="panel-generated" class="panel" hidden>
+        <div id="generated-root"><!-- generated.js renders the built-SoC view here --></div>
+      </section>
+
+      <section id="panel-artifacts" class="panel" hidden>
+        <div id="artifacts-root"><!-- artifacts.js renders the browser here --></div>
+      </section>
+    </main>
+  </div>
+
+  <link rel="stylesheet" href="/static/css/panels.css">
+  <script src="/static/js/core.js"></script>
+  <script src="/static/js/panels/yaml.js"></script>
+  <script src="/static/js/panels/build.js"></script>
+  <script src="/static/js/panels/compose.js"></script>
+  <script src="/static/js/panels/irqmap.js"></script>
+  <script src="/static/js/panels/compare.js"></script>
+  <script src="/static/js/panels/diagram.js"></script>
+  <script src="/static/js/panels/memmap.js"></script>
+  <script src="/static/js/panels/artifacts.js"></script>
+  <script src="/static/js/panels/generated.js"></script>
+  <script src="/static/js/panels/builder.js"></script>
+  <script src="/static/js/panels/canvas.js"></script>
+  <script>
+    'use strict';
+    (function () {
+      var pill = document.getElementById('topbar-draft');
+      var orig = App.setDraft.bind(App);
+      App.setDraft = function (id) {
+        orig(id);
+        pill.textContent = 'draft: ' + id;
+        pill.hidden = !id;
+      };
+    })();
+  </script>
+</body>
+</html>

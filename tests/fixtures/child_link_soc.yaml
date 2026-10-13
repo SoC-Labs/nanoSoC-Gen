@@ -1,0 +1,93 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Fixture SoC whose top-level bus matrix drives BOTH passthrough-initiator
+# boundary forms of a nested gen:True subsystem (tiny_cpu_ss):
+#
+#   * cpu_ss_0_slave -> sub_s : target boundary (EXCLUDE: [hready], the
+#     cpu_ss form). The child has a sub_s_hsel input and gates internally.
+#   * cpu_ss_0_ext   -> ext_m : initiator boundary (the eth_ss_0 form). The
+#     child has NO hsel input, so only the parent can qualify HTRANS.
+#
+# A matrix target port shows HTRANS=NONSEQ with HSEL=0 for a cycle when its
+# last master moves on to another slave. Leaf targets (u_sram_0) ignore that
+# cycle by reading HSEL; a child's passthrough initiator feeds its own matrix,
+# which ties HSEL high, so the parent must present IDLE unless it selected
+# the child. Drives the golden for SoCTopLevelBackend._child_link_htrans_gates
+# and the hsel-reader lint.
+
+module:
+  name: child_link_soc
+  gen: True
+  desc: >
+    SoC fixture whose top matrix drives a nested subsystem's slave-boundary
+    (sub_s) and initiator-boundary (ext_m) passthrough initiators, plus a
+    leaf SRAM target.
+
+  params:
+    SYS_CLK_FREQ_HZ: { type: int, default: 50000000, desc: "System clock (50 MHz)" }
+    SYS_ADDR_W:      { type: int, default: 32, desc: "System address width" }
+    SYS_DATA_W:      { type: int, default: 32, desc: "System data width" }
+    SRAM_RAM_ADDR_W: { type: int, default: 12, desc: "Top SRAM byte-address width (4 KB)" }
+
+  clocks:
+    - { name: sys_hclk, source: external, desc: "AHB clock" }
+
+  resets:
+    - { name: sys_hresetn, active: low, source: external, desc: "AHB reset" }
+
+  interfaces:
+    - { name: sys_hclk,    type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB clock in" }
+    - { name: sys_hresetn, type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB reset in" }
+    # External master (e.g. a DMA or debug port) driving the top matrix.
+    - { name: dap_s, type: ahb, direction: target, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W }, desc: "Top external slave master-in" }
+
+  instances:
+    # Leaf target: reads its own HSEL.
+    - instance_name: u_sram_0
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $SRAM_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: child_link_ahb_interconnect.sram_0 }
+
+    # Nested subsystem: its master joins the matrix; BOTH of its passthrough
+    # initiators are driven by top matrix target ports.
+    - instance_name: u_cpu_ss_0
+      module: tiny_cpu_ss
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, IMEM_RAM_ADDR_W: $SRAM_RAM_ADDR_W }
+      connections:
+        - { port: sys_hclk,    conn: sys_hclk }
+        - { port: sys_hresetn, conn: sys_hresetn }
+        - { port: sub_m,       conn: child_link_ahb_interconnect.cpu_ss_0_m }
+        - { port: sub_s,       conn: child_link_ahb_interconnect.cpu_ss_0_slave }
+        - { port: ext_m,       conn: child_link_ahb_interconnect.cpu_ss_0_ext }
+
+  interconnects:
+    - name: child_link_ahb_interconnect
+      gen: True
+      type: ahb_lite
+      desc: "Top AHB-Lite interconnect: one leaf SRAM and two child-subsystem links"
+      params:
+        SYS_ADDR_W: $SYS_ADDR_W
+        SYS_DATA_W: $SYS_DATA_W
+      connections:
+        - { port: sys_hclk,    conn: sys_hclk }
+        - { port: sys_hresetn, conn: sys_hresetn }
+      targets:
+        - { name: sram_0,         instance: u_sram_0, base: 0x00000000, size: 0x00001000, sw_access: rwx, region_type: memory, phys_size: 0x00001000, desc: "Top SRAM" }
+        - { name: cpu_ss_0_slave, base: 0x80000000, size: 0x10000000, sw_access: rwx, region_type: ~, role: ~, desc: "Subsystem slave-boundary window (sub_s)" }
+        - { name: cpu_ss_0_ext,   base: 0x90000000, size: 0x10000000, sw_access: rwx, region_type: ~, role: ~, desc: "Subsystem initiator-boundary window (ext_m)" }
+      initiators:
+        # dap_m is the external master port dap_s (without `passthrough:` the
+        # dap_s port was connected to nothing and dap_m was undriven).
+        - name: dap_m
+          passthrough: dap_s
+          targets:
+            - name: sram_0
+            - name: cpu_ss_0_slave
+            - name: cpu_ss_0_ext
+        - name: cpu_ss_0_m
+          targets:
+            - name: sram_0

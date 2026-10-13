@@ -1,0 +1,9 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Fixture: a region module that pulls the shared AHB-target boilerplate from
+# the bundled `ahb_target_region` preset via `uses:` and only states its srams.
+module:
+  name: tiny_uses_region
+  gen: False
+  uses: [ahb_target_region]
+  srams:
+    - { name: u_sram, addr_width: $RAM_ADDR_W, data_width: $RAM_DATA_W, desc: "Test SRAM" }

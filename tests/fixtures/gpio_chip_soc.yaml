@@ -1,0 +1,31 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Standalone GPIO chip-boundary fixture for the pad-ring backend (doc 07).
+#
+# Models the functional boundary the hand-written ASIC pad rings wrap: a
+# 'nanosoc_system'-named module exposing two 16-bit GPIO ports (P0, P1).  The
+# pad-ring backend extracts these via the gpio-iface path (chip.py:93-101); the
+# bonded subset (4/8/16) and tie-off come from the per-variant pin-map, NOT this
+# width.  No interconnect/instances are required — the pad ring only consumes
+# system.name + system.params + the gpio interfaces.
+
+module:
+  name: nanosoc_system
+  gen: True
+  desc: >
+    Standalone GPIO chip-boundary fixture.  Two 16-bit bidirectional GPIO
+    ports (P0=user, P1=system) plus the clock/reset/test/SWD scalar boundary
+    that the pad ring hardcodes.  Reproduces the core port view the
+    nanosoc_chip_pads_<N>pin.v hand files wrap.
+
+  params:
+    GPIO_WIDTH: { type: int, default: 16, desc: "GPIO port width (core bus)" }
+
+  clocks:
+    - { name: CLK, source: external, desc: "Chip clock" }
+
+  resets:
+    - { name: NRST, active: low, source: external, desc: "Chip reset (active low)" }
+
+  interfaces:
+    - { name: P0, type: gpio, direction: inout, params: { WIDTH: $GPIO_WIDTH }, desc: "GPIO Port-0 (user)" }
+    - { name: P1, type: gpio, direction: inout, params: { WIDTH: $GPIO_WIDTH }, desc: "GPIO Port-1 (system)" }

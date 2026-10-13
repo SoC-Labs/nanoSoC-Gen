@@ -1,0 +1,185 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+#
+# FPGA-profile descriptor for the multicore SoC top (doc-07 M4).
+#
+# This file carries the BESPOKE FPGA/board layer that the chip-boundary spec
+# (lib/chip_boundary/nanosoc_multicore.yaml) cannot derive.  The boundary spec
+# owns the model-derivable topology — which inner SoC port is bonded / tied /
+# open and each bidir pad's oe polarity.  The FPGA wrapper backend
+# (SoCFpgaWrapperBackend) consumes BOTH:
+#
+#   * boundary spec  -> the bonded/tied/open classification + oe polarity,
+#                       emitted with the Vivado tristate convention (bidir ->
+#                       _i/_o/_t, where _t = high-Z enable = ~oe for an
+#                       active-high inner oe; = oe for an active-low one).
+#   * this profile   -> board pin renames, FPGA param overrides, debug taps,
+#                       dropped pads, and the bespoke feature glue
+#                       (SYSRESETREQ self-loop, rtc_clk<-sys_fclk, etc.).
+#
+# Everything below is a hand-authored override.  Each item is flagged in the
+# backend's residuals report as NOT auto-derivable from the model.
+#
+# Reverse-engineered from the read-only hand reference
+#   pynq/vivado_ip/nanosoc_multicore_vivado_wrapper.v
+# and its IP-XACT packaging
+#   pynq/vivado_ip/package_nanosoc_multicore_ip.tcl
+
+fpga_profile:
+  # The generated module + the inner SoC it instantiates.  Inner module is
+  # taken from the boundary spec; module_name is the FPGA wrapper top.
+  module_name: nanosoc_multicore_vivado_wrapper
+
+  # ---- tristate convention -------------------------------------------------
+  # vivado: each bidir/tristate pad becomes the IOBUF triple <p>_i/<p>_o/<p>_t
+  #         with _t = 1 => Hi-Z.  _t = ~oe for active_high inner oe (VERIFIED
+  #         vs the hand file: mdio_t=~md_padoe_o, swd_dio_t=~dap_swdoen,
+  #         qspi_io_t=~qspi_io_e_int — all three inner oe are active_high).
+  tristate_convention: vivado
+
+  # ---- FPGA parameter overrides (Zynq-7020 fit) ----------------------------
+  # The ASIC SoC defaults size CC IMEM/DMEM at 16 MB (RAM_ADDR_W=22) which
+  # needs ~4146 RAMB18 and will not fit on a Pynq-Z2.  Forwarded verbatim to
+  # the inner SoC instance.  NOT model-derivable (board-capacity driven).
+  param_overrides:
+    - { name: ETH_IMEM_MEM_FPGA_IMG, default: '"image.hex"', comment: "$readmemh preload path" }
+    - { name: CC_IMEM_MEM_FPGA_IMG,  default: '"image.hex"', comment: "$readmemh preload path" }
+    - { name: CC_IMEM_RAM_ADDR_W,    default: "14", comment: "4 * 2^14 = 64 KB" }
+    - { name: CC_DMEM_RAM_ADDR_W,    default: "12", comment: "4 * 2^12 = 16 KB" }
+    - { name: CC_BOOTROM_ADDR_W,     default: "11", comment: "4 * 2^11 =  8 KB" }
+
+  # ---- board pin renames ---------------------------------------------------
+  # Maps the inner SoC net name (left) to the board / Vivado wrapper port name
+  # (right).  Applied to bonded pad ports only.  Anything not listed keeps its
+  # inner net name.  Renames keep the IP-XACT package_*.tcl physical_name set
+  # in sync (nrst, uart_rxd/txd ...).  NOT model-derivable.
+  port_renames:
+    sys_sysresetn: nrst          # active-low system reset
+    # CPU1 UART: the inner SoC ports were renamed by 548cbed
+    # (cpu1_uart_* -> chip_core_uart_*), but the BOARD-facing wrapper port names
+    # are a contract with the XDC and the package_*.tcl IP-XACT list. Rename
+    # them back so the board sees no change.
+    chip_core_uart_rxd: cpu1_uart_rxd
+    chip_core_uart_txd: cpu1_uart_txd
+    rmii_rxd:      phy_rmii_rxd
+    rmii_crs_dv:   phy_rmii_crs_dv
+    rmii_txd:      phy_rmii_txd
+    rmii_tx_en:    phy_rmii_tx_en
+    mdc_pad_o:     phy_mdc
+    qspi_csn:      qspi_ncs
+    dap_swclktck:  swd_clk
+    # bidir base renames: the _i/_o/_t triple inherits the renamed base.
+    md_pad_i:      mdio          # bidir mdio  -> mdio_i / mdio_o / mdio_t
+    dap_swditms:   swd_dio       # bidir swdio -> swd_dio_i / _o / _t
+    qspi_io_i:     qspi_io       # bidir qspi  -> qspi_io_i / _o / _t
+    # SPI master (PL022) pads are NOT renamed and NOT excluded: the bonded
+    # spi_sclk / spi_mosi / spi_ss outputs + spi_miso input pass through to
+    # the board wrapper verbatim (no tristate — a master owns the bus),
+    # matching the hand reference pynq/vivado_ip/*_vivado_wrapper.v exactly.
+
+  # ---- dropped pads --------------------------------------------------------
+  # Boundary pads that the FPGA wrapper does NOT expose.  hostio4 is omitted
+  # entirely on the board; rtc_clk is shared from sys_fclk (see features);
+  # JTAG + scan/test pads are tied off (pure-SWD, no scan on FPGA).  The inner
+  # SoC ports these pads fed become tie-offs / opens via the boundary spec or
+  # the feature/extra_ties blocks below.  NOT model-derivable.
+  exclude_pads:
+    - hostio4        # 7-bit bidir HOSTIO4 — no board pins
+    - rtc_clk        # shared from sys_fclk (feature rtc_from_sys_fclk)
+    - jtag_tdi       # pure-SWD: JTAG unused
+    - jtag_ntrst
+    - jtag_tdo
+    - sys_scanenable # no scan on FPGA
+    - sys_testmode
+
+  # Constant to drive an excluded-pad's inner INPUT port (default 1'b0).
+  # Keyed by the inner SoC port name.  e.g. JTAG TRSTn is deasserted high.
+  exclude_ties:
+    dap_ntrst: "1'b1"   # JTAG TRSTn deasserted (active low)
+
+  # ---- extra exports + debug taps ------------------------------------------
+  # Extra output ports the FPGA wrapper exposes that the boundary spec leaves
+  # OPEN (or re-exports under a new name).  `from` is an inner SoC output port
+  # or an existing wrapper port; `kind` selects the binding style:
+  #   soc_out  : bind the inner output DIRECTLY to the tap/export port on the
+  #              instance (no internal wire) — e.g. cpu_0_lockup -> *_dbg,
+  #              eth_irq re-exported on the like-named port.
+  #   soc_wire : bind the inner output to an internal wire on the instance,
+  #              then `assign <port> = <wire>;` (the wire is reused elsewhere) —
+  #              e.g. sys_hclk feeds sys_hclk_dbg, sys_hresetn feeds
+  #              sys_hresetn_o.
+  #   wire     : `assign <port> = <existing wrapper port>;` (no instance change)
+  #              — e.g. uart_txd_dbg mirrors the uart_txd port.
+  # Used to drive board heartbeat / activity / lockup LEDs and PS monitors.
+  # NOT model-derivable.
+  debug_taps:
+    # `name` is the BOARD-facing wrapper port (referenced by the XDC and the
+    # package_*.tcl IP-XACT contract) and is deliberately unchanged; `from` is
+    # an inner SoC port, renamed by 548cbed.
+    - { name: eth_irq,          from: eth_irq,         kind: soc_out,  comment: "eth MAC IRQ (re-exported open output)" }
+    - { name: cpu1_wdog_reset,  from: chip_core_wdog_reset, kind: soc_out,  comment: "CPU1 watchdog reset request (status export)" }
+    - { name: sys_hresetn_o,    from: sys_hresetn,  kind: soc_wire, comment: "system HRESETn status export" }
+    - { name: sys_hclk_dbg,     from: sys_hclk,     kind: soc_wire, comment: "system HCLK heartbeat LED" }
+    - { name: uart_txd_dbg,     from: uart_txd,     kind: wire,     comment: "CPU0 UART activity tap (-> EMIO UART1)" }
+    - { name: cpu_0_lockup_dbg, from: network_core_lockup, kind: soc_out,  comment: "CPU0 lockup LED" }
+    - { name: cpu_1_lockup_dbg, from: chip_core_lockup,    kind: soc_out,  comment: "CPU1 lockup LED" }
+    - { name: ptp_lock_dbg,     from: ha1588_servo_locked, kind: soc_out, comment: "HA1588 PTP hardware-servo lock status (-> board LED)" }
+
+  # ---- bespoke feature glue ------------------------------------------------
+  # Each toggles a hand-authored block in the template.  These are FPGA-only
+  # behaviours with no model representation; report them as residuals.
+  features:
+    # SYSRESETREQ per-core isolation (Round-8 HW bug #1 fix).
+    #
+    # HISTORY: this feature USED to be a "self-loop" — it OR'd both cores'
+    # cpu_*_sysresetreq, 2-FF synchronised, gated with a 10-bit startup counter,
+    # and fed the result back into the inner SoC's GLOBAL sys_sysresetreq. That
+    # was harmful: a single core's NVIC_SystemReset() (SCB->AIRCR / SWD `reset`)
+    # rebooted BOTH cores + the shared fabric (PHC / IPC / ring), defeating
+    # per-core reset (percore_reset_isolation sentinel FAIL).
+    #
+    # Per-core self-reset is ALREADY handled INSIDE the SoC: u_reset_ctrl_0
+    # (nanosoc_reset_ctrl) taps each core's cpu_*_sysresetreq and asserts only
+    # that core's resetn (HW-validated per-core reset on a PYNQ-Z2 board). The wrapper must
+    # NOT loop SYSRESETREQ back into the global reset.
+    #
+    # So: do NOT drive sys_sysresetreq (the boundary tie sys_sysresetreq=1'b0
+    # WINS -> the inner SoC's sys_sysresetreq input == ext_sysresetreq is tied
+    # inactive; there is no external system-reset source on this board). Keep the
+    # two cpu_*_sysresetreq outputs observed (driven by the SoC, collected into a
+    # harmless unused sink) so they do not dangle. `isolate: true` selects the
+    # observation-only sink in the template instead of the old self-loop block.
+    sysresetreq_selfloop:
+      enabled: true
+      isolate: true                    # per-core isolation: no global self-loop
+      taps: [network_core_sysresetreq, chip_core_sysresetreq]  # inner outputs it observes
+    # rtc_clk shares sys_fclk rather than a dedicated bonded clock pad.
+    rtc_from_sys_fclk:
+      enabled: true
+      drives: rtc_clk
+      source: sys_fclk
+    # SWJ-DP power-on reset follows nrst (boundary ties dap_npotrst=1'b1).
+    dap_npotrst_from_nrst:
+      enabled: true
+      drives: dap_npotrst
+      source: nrst
+
+  # ---- extra status outputs that are bound on the instance directly --------
+  # cpu_0_lockup / cpu_1_lockup are consumed by debug taps above; the
+  # remaining boundary opens stay open.  No additional entries needed here.
+
+  # ---- IP-XACT consistency contract ---------------------------------------
+  # The package_*.tcl curates these physical_name port names; the generated
+  # wrapper MUST expose every one of them (the backend asserts this).  Bus
+  # interfaces map a subset; the rest are standalone ports auto-imported by
+  # ipx::package_project.
+  ip_xact:
+    core_name: nanosoc_multicore_vivado_wrapper
+    supported_families: [zynq, zynquplus, artix7, kintex7, spartan7, virtex7]
+    ipi_drc_ignore_freq_hz: true
+    bus_interfaces:
+      - { name: sys_fclk,     bus_type: "xilinx.com:signal:clock:1.0",   abstraction: "xilinx.com:signal:clock_rtl:1.0",   mode: slave,  port_map: { CLK: sys_fclk },                params: { ASSOCIATED_RESET: nrst, FREQ_HZ: "25000000" } }
+      - { name: rmii_ref_clk, bus_type: "xilinx.com:signal:clock:1.0",   abstraction: "xilinx.com:signal:clock_rtl:1.0",   mode: slave,  port_map: { CLK: rmii_ref_clk },            params: { FREQ_HZ: "50000000" } }
+      - { name: nrst,         bus_type: "xilinx.com:signal:reset:1.0",   abstraction: "xilinx.com:signal:reset_rtl:1.0",   mode: slave,  port_map: { RST: nrst },                    params: { POLARITY: ACTIVE_LOW } }
+      - { name: uart,         bus_type: "xilinx.com:interface:uart:1.0", abstraction: "xilinx.com:interface:uart_rtl:1.0", mode: master, port_map: { RxD: uart_rxd, TxD: uart_txd }, params: {} }
+    # physical_name set the generated wrapper must contain (lint gate).
+    physical_names: [sys_fclk, rmii_ref_clk, nrst, uart_rxd, uart_txd]

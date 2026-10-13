@@ -1,0 +1,38 @@
+#-----------------------------------------------------------------------------
+# AXI-Stream Interface Definition (Full Width)
+# Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+# SPDX-License-Identifier: Apache-2.0
+#-----------------------------------------------------------------------------
+# AXI-Stream interface with TDATA, TSTRB, TLAST, and optional FLUSH.
+# Used for DMA-to-expansion region data streaming (32-bit).
+#
+# Parameters:
+#   DATA_W — stream data width (default 32)
+#   HAS_FLUSH — include flush signal (default true)
+#
+# Each instance has a role:
+#   source — drives TVALID, TDATA, TSTRB, TLAST; receives TREADY, FLUSH
+#   sink   — receives TVALID, TDATA, TSTRB, TLAST; drives TREADY
+#
+# Usage:
+#   - interface: !include ../interfaces/axis_stream.yaml
+#     name: dmac_str_out_0
+#     role: source
+#     parameters: { DATA_W: 32 }
+#-----------------------------------------------------------------------------
+
+interface:
+  name: axis_stream
+  description: AXI-Stream interface (with strobe and last)
+  protocol: axi_stream
+
+  parameters:
+    DATA_W:    { type: int,  default: 32,   description: Stream data width }
+
+  # Signals listed from the source perspective; sink inverts directions
+  signals:
+    - { name: tvalid, direction: out, width: 1,                  description: Transfer valid }
+    - { name: tready, direction: in,  width: 1,                  description: Transfer ready }
+    - { name: tdata,  direction: out, width: ${DATA_W},          description: Transfer data }
+    - { name: tstrb,  direction: out, width: "${DATA_W} / 8",    description: Byte strobe }
+    - { name: tlast,  direction: out, width: 1,                  description: Last transfer in packet }

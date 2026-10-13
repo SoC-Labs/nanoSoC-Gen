@@ -1,0 +1,26 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Droppable component package — CPU peripheral subsystem (configurator doc 06a).
+# Grounds: nanosoc-multicore-system/sys_desc/cc_periph_subsystem.yaml
+# (module cc_periph_subsystem).
+component:
+  id: cpu_peripheral_subsystem
+  module: cc_periph_subsystem
+  category: subsystem
+  label: "CPU Peripheral Subsystem"
+  desc: "CMSDK peripheral block for a CPU: two timers, a dual timer, a
+    watchdog, a console UART and a PL022 SPI master, behind a single AHB slave
+    port. Drop in to give a bare CPU subsystem its timers, watchdog and I/O."
+  window_size: 64K
+  knobs:
+    # REGISTER_WDATA latches HWDATA at the APB address phase; set 1 for
+    # reliable back-to-back writes as a target on a multi-master AHB matrix.
+    - { param: REGISTER_WDATA, label: "Latch write data", kind: enum,
+        default: 0, options: [0, 1],
+        desc: "1 = latch HWDATA at the APB address phase for reliable
+          back-to-back writes on a multi-master matrix; 0 = legacy timing." }
+    # SPI_APB_SLOT selects which of the 4 APB extension slots (12..15) hosts
+    # the PL022 SPI master; 12 => 0x..C000 under the subsystem base.
+    - { param: SPI_APB_SLOT, label: "SPI APB slot", kind: int,
+        default: 12, min: 12, max: 15,
+        desc: "APB extension slot (12..15) hosting the PL022 SPI master; sets
+          the 0xN000 offset under the subsystem base." }

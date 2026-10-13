@@ -1,0 +1,365 @@
+//-----------------------------------------------------------------------------
+// AHB Interconnect Wrapper
+// - Contains AHB Lite Bus Matrix
+// - Inlines AHB-to-APB bridges and APB slave muxes for APB targets
+//
+// Contributors
+//
+// David Mapstone (d.a.mapstone@soton.ac.uk)
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Source:    {{ source_yaml }}
+// Template:  {{ template_name }}
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+{% if apb_targets %}
+//
+// APB Targets (bridge + slave mux inlined):
+{% for t in apb_targets %}
+//   {{ t.name }} — AHB addr width: {{ t.ahb_addr_width }}, decode PADDR[{{ t.decode_msb }}:{{ t.decode_lsb }}]
+{% if t.has_mux %}
+//     Region: {{ t.region_base }}   Slot size: {{ t.slot_size }}
+//     Slot   PADDR Offset   AHB Address    En   Peripheral
+//     ----   ------------   -----------    --   ----------
+{% for s in t.slots %}
+//     {{ '%2d' % s.slot }}   {{ s.paddr_offset }}     {{ s.ahb_addr }}    {{ 'Y' if s.enabled else '-' }}    {{ s.name }}{% if s.comment %}  // {{ s.comment }}{% endif %}
+
+{% endfor %}
+{% endif %}
+{% endfor %}
+//-----------------------------------------------------------------------------
+{% endif %}
+
+module {{ module_name }} #(
+    parameter    SYS_ADDR_W    = {{ addr_width }},  // System Address Width
+    parameter    SYS_DATA_W    = {{ data_width }}{{ ',' if apb_params else '' }}   // System Data Width
+{% for p in apb_params %}
+    parameter    {{ p.name | ljust(44) }} = {{ p.value }}{{ ',' if not loop.last else '' }}  // {{ p.comment }}
+{% endfor %}
+)(
+    // System Clocks, Resets and Control
+    input  wire                     sys_hclk,            // AHB System Clock
+    input  wire                     sys_hresetn,         // AHB System Reset
+    input  wire                     sys_scanenable,      // Scan enable signal
+    input  wire                     sys_scaninhclk,      // HCLK scan input  wire
+    output wire                     sys_scanouthclk,     // Scan Chain Output
+
+    // System Address Remap control
+    input  wire               [3:0] sys_remap_ctrl,      // System Address REMAP control
+{% for init in initiators %}
+
+    // {{ init }} Master Port
+    input  wire  [SYS_ADDR_W-1:0]  {{ (init + '_haddr,')     | ljust(sig_col) }}// Address bus
+    input  wire             [1:0]  {{ (init + '_htrans,')    | ljust(sig_col) }}// Transfer type
+    input  wire                    {{ (init + '_hwrite,')    | ljust(sig_col) }}// Transfer direction
+    input  wire             [2:0]  {{ (init + '_hsize,')     | ljust(sig_col) }}// Transfer size
+    input  wire             [2:0]  {{ (init + '_hburst,')    | ljust(sig_col) }}// Burst type
+    input  wire             [3:0]  {{ (init + '_hprot,')     | ljust(sig_col) }}// Protection control
+    input  wire  [SYS_DATA_W-1:0]  {{ (init + '_hwdata,')    | ljust(sig_col) }}// Write data
+    input  wire                    {{ (init + '_hmastlock,')  | ljust(sig_col) }}// Locked Sequence
+    output wire  [SYS_DATA_W-1:0]  {{ (init + '_hrdata,')    | ljust(sig_col) }}// Read data bus
+    output wire                    {{ (init + '_hready,')    | ljust(sig_col) }}// HREADY feedback
+    output wire                    {{ (init + '_hresp,')     | ljust(sig_col) }}// Transfer response
+{% endfor %}
+{% for target in ahb_targets %}
+
+    // {{ target }} AHB Slave Port
+    input  wire  [SYS_DATA_W-1:0]  {{ (target + '_hrdata,')    | ljust(sig_col) }}// Read data bus
+    input  wire                    {{ (target + '_hreadyout,') | ljust(sig_col) }}// HREADY feedback
+    input  wire                    {{ (target + '_hresp,')     | ljust(sig_col) }}// Transfer response
+    output wire                    {{ (target + '_hsel,')      | ljust(sig_col) }}// Slave Select
+    output wire  [SYS_ADDR_W-1:0]  {{ (target + '_haddr,')    | ljust(sig_col) }}// Address bus
+    output wire             [1:0]  {{ (target + '_htrans,')   | ljust(sig_col) }}// Transfer type
+    output wire                    {{ (target + '_hwrite,')   | ljust(sig_col) }}// Transfer direction
+    output wire             [2:0]  {{ (target + '_hsize,')    | ljust(sig_col) }}// Transfer size
+    output wire             [2:0]  {{ (target + '_hburst,')   | ljust(sig_col) }}// Burst type
+    output wire             [3:0]  {{ (target + '_hprot,')    | ljust(sig_col) }}// Protection control
+    output wire  [SYS_DATA_W-1:0]  {{ (target + '_hwdata,')   | ljust(sig_col) }}// Write data
+    output wire                    {{ (target + '_hmastlock,') | ljust(sig_col) }}// Locked Sequence
+    output wire                    {{ (target + '_hreadymux' + ('' if (loop.last and not apb_targets) else ',')) | ljust(sig_col) }}// Transfer done
+{% endfor %}
+{% for t in apb_targets %}
+
+    // {{ t.name }} APB Target (bridge + mux inlined)
+    input  wire                     {{ t.name }}_pclken,          // APB clock enable
+    output wire  [{{ t.decode_lsb - 1 }}:0]           {{ t.name }}_paddr,           // Shared APB address (lower bits)
+    output wire                     {{ t.name }}_pwrite,          // APB write
+    output wire  [31:0]             {{ t.name }}_pwdata,          // APB write data
+    output wire                     {{ t.name }}_penable,         // APB enable
+    output wire                     {{ t.name }}_apbactive,       // APB active
+{% if t.has_mux %}
+{% for s in t.slots if not s.is_gap %}
+    // Slot {{ '%2d' % s.slot }}: {{ s.name }}{% if s.comment %}  ({{ s.comment }}){% endif %}
+
+    output wire                     {{ s.name }}_psel,
+    input  wire  [31:0]             {{ s.name }}_prdata,
+    input  wire                     {{ s.name }}_pready,
+    input  wire                     {{ s.name }}_pslverr{{ '' if (loop.last and t.is_last_target) else ',' }}
+{% endfor %}
+{% else %}
+    // Single APB port (no slave mux)
+    output wire                     {{ t.name }}_psel,
+    input  wire  [31:0]             {{ t.name }}_prdata,
+    input  wire                     {{ t.name }}_pready,
+    input  wire                     {{ t.name }}_pslverr{{ '' if t.is_last_target else ',' }}
+{% endif %}
+{% if not loop.last %}
+
+{% endif %}
+{% endfor %}
+);
+
+  // -------------------------------------------------------------------------
+  // Internal AHB wires for APB targets (bus matrix sees these as AHB ports)
+  // -------------------------------------------------------------------------
+{% for t in apb_targets %}
+  // {{ t.name }}
+  wire                    i_{{ t.name }}_hsel;
+  wire  [SYS_ADDR_W-1:0] i_{{ t.name }}_haddr;
+  wire             [1:0]  i_{{ t.name }}_htrans;
+  wire                    i_{{ t.name }}_hwrite;
+  wire             [2:0]  i_{{ t.name }}_hsize;
+  wire             [2:0]  i_{{ t.name }}_hburst;
+  wire             [3:0]  i_{{ t.name }}_hprot;
+  wire  [SYS_DATA_W-1:0] i_{{ t.name }}_hwdata;
+  wire                    i_{{ t.name }}_hmastlock;
+  wire  [SYS_DATA_W-1:0] i_{{ t.name }}_hrdata;
+  wire                    i_{{ t.name }}_hreadyout;
+  wire                    i_{{ t.name }}_hresp;
+  wire                    i_{{ t.name }}_hreadymux;
+{% endfor %}
+
+  // -------------------------------------------------------------------------
+  // Internal APB wires for APB targets
+  // -------------------------------------------------------------------------
+{% for t in apb_targets %}
+  // {{ t.name }}
+  wire  [{{ t.ahb_addr_width - 1 }}:0]        i_{{ t.name }}_paddr_full;
+  wire                    i_{{ t.name }}_psel;
+  wire                    i_{{ t.name }}_penable;
+  wire                    i_{{ t.name }}_pwrite;
+  wire             [2:0]  i_{{ t.name }}_pprot;
+  wire             [3:0]  i_{{ t.name }}_pstrb;
+  wire  [31:0]            i_{{ t.name }}_pwdata;
+  wire  [31:0]            i_{{ t.name }}_prdata_mux;
+  wire                    i_{{ t.name }}_pready_mux;
+  wire                    i_{{ t.name }}_pslverr_mux;
+{% if t.has_mux %}
+  // Gap slot PSEL wires (driven by mux, not used externally)
+{% for s in t.slots if s.is_gap %}
+  wire                    i_{{ t.name }}_{{ s.name }}_psel;
+{% endfor %}
+{% endif %}
+{% if t.big_endian %}
+  // Big-endian control
+  wire  [31:0]            i_{{ t.name }}_hwdata_le;
+  wire  [31:0]            i_{{ t.name }}_hrdata_le;
+  wire                    i_{{ t.name }}_be_swap_ctrl_en;
+  reg              [1:0]  i_{{ t.name }}_be_swap_ctrl;
+{% endif %}
+{% endfor %}
+
+  // -------------------------------------------------------------------------
+  // Bus Matrix Instantiation
+  // -------------------------------------------------------------------------
+  {{ busmatrix_lite_name }} u_busmatrix (
+      // System Clocks, Resets and Control
+      {{ '.HCLK'        | ljust(port_col) }}(sys_hclk),            // AHB System Clock
+      {{ '.HRESETn'     | ljust(port_col) }}(sys_hresetn),         // AHB System Reset
+      {{ '.SCANENABLE'  | ljust(port_col) }}(sys_scanenable),      // Scan enable signal
+      {{ '.SCANINHCLK'  | ljust(port_col) }}(sys_scaninhclk),      // HCLK scan input  wire
+      {{ '.SCANOUTHCLK' | ljust(port_col) }}(sys_scanouthclk),     // Scan Chain Output
+
+      // System Address Remap control
+      {{ '.REMAP'       | ljust(port_col) }}(sys_remap_ctrl),      // System Address REMAP control
+{% for init in initiators %}
+
+      // {{ init | upper }} Master Port
+      {{ ('.HADDR_'     + init | upper) | ljust(port_col) }}{{ ('(' + init + '_haddr),')     | ljust(inst_col) }}// Address bus
+      {{ ('.HTRANS_'    + init | upper) | ljust(port_col) }}{{ ('(' + init + '_htrans),')    | ljust(inst_col) }}// Transfer type
+      {{ ('.HWRITE_'    + init | upper) | ljust(port_col) }}{{ ('(' + init + '_hwrite),')    | ljust(inst_col) }}// Transfer direction
+      {{ ('.HSIZE_'     + init | upper) | ljust(port_col) }}{{ ('(' + init + '_hsize),')     | ljust(inst_col) }}// Transfer size
+      {{ ('.HBURST_'    + init | upper) | ljust(port_col) }}{{ ('(' + init + '_hburst),')    | ljust(inst_col) }}// Burst type
+      {{ ('.HPROT_'     + init | upper) | ljust(port_col) }}{{ ('(' + init + '_hprot),')     | ljust(inst_col) }}// Protection control
+      {{ ('.HWDATA_'    + init | upper) | ljust(port_col) }}{{ ('(' + init + '_hwdata),')    | ljust(inst_col) }}// Write data
+      {{ ('.HMASTLOCK_' + init | upper) | ljust(port_col) }}{{ ('(' + init + '_hmastlock),') | ljust(inst_col) }}// Locked Sequence
+      {{ ('.HRDATA_'    + init | upper) | ljust(port_col) }}{{ ('(' + init + '_hrdata),')    | ljust(inst_col) }}// Read data bus
+      {{ ('.HREADY_'    + init | upper) | ljust(port_col) }}{{ ('(' + init + '_hready),')    | ljust(inst_col) }}// HREADY feedback
+      {{ ('.HRESP_'     + init | upper) | ljust(port_col) }}{{ ('(' + init + '_hresp),')     | ljust(inst_col) }}// Transfer response
+{% endfor %}
+{% for entry in all_targets %}
+{% if entry.protocol == 'ahb' %}
+{% set target = entry.name %}
+
+      // {{ target | upper }} AHB Slave Port
+      {{ ('.HRDATA_'    + target | upper) | ljust(port_col) }}{{ ('(' + target + '_hrdata),')    | ljust(inst_col) }}// Read data bus
+      {{ ('.HREADYOUT_' + target | upper) | ljust(port_col) }}{{ ('(' + target + '_hreadyout),') | ljust(inst_col) }}// HREADY feedback
+      {{ ('.HRESP_'     + target | upper) | ljust(port_col) }}{{ ('(' + target + '_hresp),')     | ljust(inst_col) }}// Transfer response
+      {{ ('.HSEL_'      + target | upper) | ljust(port_col) }}{{ ('(' + target + '_hsel),')      | ljust(inst_col) }}// Slave Select
+      {{ ('.HADDR_'     + target | upper) | ljust(port_col) }}{{ ('(' + target + '_haddr),')     | ljust(inst_col) }}// Address bus
+      {{ ('.HTRANS_'    + target | upper) | ljust(port_col) }}{{ ('(' + target + '_htrans),')    | ljust(inst_col) }}// Transfer type
+      {{ ('.HWRITE_'    + target | upper) | ljust(port_col) }}{{ ('(' + target + '_hwrite),')    | ljust(inst_col) }}// Transfer direction
+      {{ ('.HSIZE_'     + target | upper) | ljust(port_col) }}{{ ('(' + target + '_hsize),')     | ljust(inst_col) }}// Transfer size
+      {{ ('.HBURST_'    + target | upper) | ljust(port_col) }}{{ ('(' + target + '_hburst),')    | ljust(inst_col) }}// Burst type
+      {{ ('.HPROT_'     + target | upper) | ljust(port_col) }}{{ ('(' + target + '_hprot),')     | ljust(inst_col) }}// Protection control
+      {{ ('.HWDATA_'    + target | upper) | ljust(port_col) }}{{ ('(' + target + '_hwdata),')    | ljust(inst_col) }}// Write data
+      {{ ('.HMASTLOCK_' + target | upper) | ljust(port_col) }}{{ ('(' + target + '_hmastlock),') | ljust(inst_col) }}// Locked Sequence
+      {{ ('.HREADYMUX_' + target | upper) | ljust(port_col) }}{{ ('(' + target + '_hreadymux)' + ('' if loop.last else ',')) | ljust(inst_col) }}// Transfer done
+{% else %}
+{% set target = entry.name %}
+
+      // {{ target | upper }} APB Target — AHB side (internal wires)
+      {{ ('.HRDATA_'    + target | upper) | ljust(port_col) }}{{ ('(i_' + target + '_hrdata),')    | ljust(inst_col) }}// Read data bus
+      {{ ('.HREADYOUT_' + target | upper) | ljust(port_col) }}{{ ('(i_' + target + '_hreadyout),') | ljust(inst_col) }}// HREADY feedback
+      {{ ('.HRESP_'     + target | upper) | ljust(port_col) }}{{ ('(i_' + target + '_hresp),')     | ljust(inst_col) }}// Transfer response
+      {{ ('.HSEL_'      + target | upper) | ljust(port_col) }}{{ ('(i_' + target + '_hsel),')      | ljust(inst_col) }}// Slave Select
+      {{ ('.HADDR_'     + target | upper) | ljust(port_col) }}{{ ('(i_' + target + '_haddr),')     | ljust(inst_col) }}// Address bus
+      {{ ('.HTRANS_'    + target | upper) | ljust(port_col) }}{{ ('(i_' + target + '_htrans),')    | ljust(inst_col) }}// Transfer type
+      {{ ('.HWRITE_'    + target | upper) | ljust(port_col) }}{{ ('(i_' + target + '_hwrite),')    | ljust(inst_col) }}// Transfer direction
+      {{ ('.HSIZE_'     + target | upper) | ljust(port_col) }}{{ ('(i_' + target + '_hsize),')     | ljust(inst_col) }}// Transfer size
+      {{ ('.HBURST_'    + target | upper) | ljust(port_col) }}{{ ('(i_' + target + '_hburst),')    | ljust(inst_col) }}// Burst type
+      {{ ('.HPROT_'     + target | upper) | ljust(port_col) }}{{ ('(i_' + target + '_hprot),')     | ljust(inst_col) }}// Protection control
+      {{ ('.HWDATA_'    + target | upper) | ljust(port_col) }}{{ ('(i_' + target + '_hwdata),')    | ljust(inst_col) }}// Write data
+      {{ ('.HMASTLOCK_' + target | upper) | ljust(port_col) }}{{ ('(i_' + target + '_hmastlock),') | ljust(inst_col) }}// Locked Sequence
+      {{ ('.HREADYMUX_' + target | upper) | ljust(port_col) }}{{ ('(i_' + target + '_hreadymux)' + ('' if loop.last else ',')) | ljust(inst_col) }}// Transfer done
+{% endif %}
+{% endfor %}
+  );
+
+{% for t in apb_targets %}
+  // ===========================================================================
+  // APB Target: {{ t.name }}
+  // ===========================================================================
+{% if t.big_endian %}
+
+  // ---- Big-endian support ----
+  wire  [31:0]  i_{{ t.name }}_hwdata_be_in;
+  wire  [31:0]  i_{{ t.name }}_hrdata_be_out;
+  wire          i_{{ t.name }}_be = ({{ t.name | upper }}_BE != 0) ? 1'b1 : 1'b0;
+
+  function [31:0] {{ t.name }}_endian_swap;
+    input [31:0] data_in;
+    input  [1:0] swap_ctrl;
+    input        big_endian;
+    reg   [31:0] data_mux_1;
+    begin
+      data_mux_1        = (swap_ctrl[0] & big_endian) ?
+        {data_in[23:16], data_in[31:24], data_in[7:0],  data_in[15:8]}  :
+        {data_in[31:24], data_in[23:16], data_in[15:8],  data_in[7:0]};
+      {{ t.name }}_endian_swap = (swap_ctrl[1] & big_endian) ?
+        {data_mux_1[15:0], data_mux_1[31:16]} :
+        {data_mux_1[31:16], data_mux_1[15:0]};
+    end
+  endfunction
+
+  wire  [1:0]   i_{{ t.name }}_nxt_be_swap_ctrl;
+  assign i_{{ t.name }}_nxt_be_swap_ctrl[1] = i_{{ t.name }}_be & (i_{{ t.name }}_hsize[1:0] == 2'b10);
+  assign i_{{ t.name }}_nxt_be_swap_ctrl[0] = i_{{ t.name }}_be & (i_{{ t.name }}_hsize[1:0] != 2'b00);
+
+  wire  i_{{ t.name }}_be_swap_ctrl_en;
+  assign i_{{ t.name }}_be_swap_ctrl_en = i_{{ t.name }}_hsel & i_{{ t.name }}_htrans[1] & i_{{ t.name }}_hreadymux & i_{{ t.name }}_be;
+
+  reg   [1:0]   i_{{ t.name }}_be_swap_ctrl_r;
+  always @(posedge sys_hclk or negedge sys_hresetn) begin
+    if (~sys_hresetn)
+      i_{{ t.name }}_be_swap_ctrl_r <= 2'b00;
+    else if (i_{{ t.name }}_be_swap_ctrl_en)
+      i_{{ t.name }}_be_swap_ctrl_r <= i_{{ t.name }}_nxt_be_swap_ctrl;
+  end
+
+  assign i_{{ t.name }}_hwdata_le = {{ t.name }}_endian_swap(i_{{ t.name }}_hwdata, i_{{ t.name }}_be_swap_ctrl_r, i_{{ t.name }}_be);
+  assign i_{{ t.name }}_hrdata    = {{ t.name }}_endian_swap(i_{{ t.name }}_hrdata_le, i_{{ t.name }}_be_swap_ctrl_r, i_{{ t.name }}_be);
+
+{% endif %}
+
+  // ---- AHB-to-APB Bridge ----
+  cmsdk_ahb_to_apb #(
+    .ADDRWIDTH      ({{ t.ahb_addr_width }}),
+    .REGISTER_RDATA (1),
+    .REGISTER_WDATA (0)
+  ) u_{{ t.name }}_bridge (
+    .HCLK       (sys_hclk),
+    .HRESETn    (sys_hresetn),
+    .HSEL       (i_{{ t.name }}_hsel),
+    .HADDR      (i_{{ t.name }}_haddr[{{ t.ahb_addr_width - 1 }}:0]),
+    .HTRANS     (i_{{ t.name }}_htrans),
+    .HSIZE      (i_{{ t.name }}_hsize),
+    .HPROT      (i_{{ t.name }}_hprot),
+    .HWRITE     (i_{{ t.name }}_hwrite),
+    .HREADY     (i_{{ t.name }}_hreadymux),
+{% if t.big_endian %}
+    .HWDATA     (i_{{ t.name }}_hwdata_le),
+{% else %}
+    .HWDATA     (i_{{ t.name }}_hwdata),
+{% endif %}
+    .HREADYOUT  (i_{{ t.name }}_hreadyout),
+{% if t.big_endian %}
+    .HRDATA     (i_{{ t.name }}_hrdata_le),
+{% else %}
+    .HRDATA     (i_{{ t.name }}_hrdata),
+{% endif %}
+    .HRESP      (i_{{ t.name }}_hresp),
+    .PADDR      (i_{{ t.name }}_paddr_full),
+    .PSEL       (i_{{ t.name }}_psel),
+    .PENABLE    (i_{{ t.name }}_penable),
+    .PSTRB      (i_{{ t.name }}_pstrb),
+    .PPROT      (i_{{ t.name }}_pprot),
+    .PWRITE     (i_{{ t.name }}_pwrite),
+    .PWDATA     (i_{{ t.name }}_pwdata),
+    .APBACTIVE  ({{ t.name }}_apbactive),
+    .PCLKEN     ({{ t.name }}_pclken),
+    .PRDATA     (i_{{ t.name }}_prdata_mux),
+    .PREADY     (i_{{ t.name }}_pready_mux),
+    .PSLVERR    (i_{{ t.name }}_pslverr_mux)
+  );
+
+{% if t.has_mux %}
+  // ---- APB Slave Mux: PADDR[{{ t.decode_msb }}:{{ t.decode_lsb }}] selects one of {{ t.n_slots }} slave ports ----
+  cmsdk_apb_slave_mux #(
+{% for s in t.slots %}
+    .PORT{{ s.slot }}_ENABLE  ({{ '%s_%s_ENABLE' % (t.name | upper, s.param_name) if not s.is_gap else '0' }}){{ ',' if not loop.last else '' }}
+{% endfor %}
+  ) u_{{ t.name }}_mux (
+    .DECODE4BIT  (i_{{ t.name }}_paddr_full[{{ t.decode_msb }}:{{ t.decode_lsb }}]),
+    .PSEL        (i_{{ t.name }}_psel),
+
+{% for s in t.slots %}
+    // Slot {{ '%2d' % s.slot }}: {{ s.name }}{% if s.comment %}  ({{ s.comment }}){% endif %}
+
+{% if s.is_gap %}
+    .PSEL{{ s.slot }}       (i_{{ t.name }}_{{ s.name }}_psel),
+    .PREADY{{ s.slot }}     (1'b1),
+    .PRDATA{{ s.slot }}     (32'h00000000),
+    .PSLVERR{{ s.slot }}    (1'b0),
+{% else %}
+    .PSEL{{ s.slot }}       ({{ s.name }}_psel         ),
+    .PREADY{{ s.slot }}     ({{ s.name }}_pready       ),
+    .PRDATA{{ s.slot }}     ({{ s.name }}_prdata       ),
+    .PSLVERR{{ s.slot }}    ({{ s.name }}_pslverr),
+{% endif %}
+{% endfor %}
+
+    .PREADY    (i_{{ t.name }}_pready_mux),
+    .PRDATA    (i_{{ t.name }}_prdata_mux),
+    .PSLVERR   (i_{{ t.name }}_pslverr_mux)
+  );
+
+{% else %}
+  // ---- Single APB port (no slave mux) ----
+  assign {{ t.name }}_psel     = i_{{ t.name }}_psel;
+  assign i_{{ t.name }}_prdata_mux  = {{ t.name }}_prdata;
+  assign i_{{ t.name }}_pready_mux  = {{ t.name }}_pready;
+  assign i_{{ t.name }}_pslverr_mux = {{ t.name }}_pslverr;
+
+{% endif %}
+  // ---- Shared APB bus outputs: {{ t.name }} ----
+  assign {{ t.name }}_paddr   = i_{{ t.name }}_paddr_full[{{ t.decode_lsb - 1 }}:0];
+  assign {{ t.name }}_penable = i_{{ t.name }}_penable;
+  assign {{ t.name }}_pwrite  = i_{{ t.name }}_pwrite;
+  assign {{ t.name }}_pwdata  = i_{{ t.name }}_pwdata;
+
+{% endfor %}
+endmodule

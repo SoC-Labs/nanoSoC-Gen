@@ -1,0 +1,4 @@
+jinja2
+pyyaml
+systemrdl-compiler>=1.29
+peakrdl-regblock>=1.2

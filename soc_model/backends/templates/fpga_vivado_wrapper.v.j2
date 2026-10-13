@@ -1,0 +1,171 @@
+//-----------------------------------------------------------------------------
+// {{ module_name }} — FPGA Vivado IP wrapper for {{ inner_module }}
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Template:  fpga_vivado_wrapper.v.j2
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+// Synthesizable wrapper presenting {{ inner_module }} with IP-Integrator-friendly
+// board interfaces.  Bonded boundary signals are wired straight to wrapper
+// ports; bidir/tristate pads use the Vivado IOBUF convention (_i/_o/_t, where
+// _t = 1 => Hi-Z; _t = ~oe for an active-high inner output-enable).  No pad
+// cells are instantiated (the FPGA fabric provides the IOBUFs).
+//
+// The model-derivable topology (bonded / tied / open + oe polarity) comes from
+// the chip-boundary spec; the bespoke FPGA/board layer (param overrides, board
+// pin renames, debug taps, dropped pads, the SYSRESETREQ self-loop, etc.) comes
+// from the FPGA profile.  Bespoke items applied:
+{% for r in residuals %}
+//   - {{ r }}
+{% endfor %}
+//-----------------------------------------------------------------------------
+
+`timescale 1ns/1ps
+
+module {{ module_name }}{% if param_overrides %} #(
+{% for p in param_overrides %}
+    parameter {{ '%-22s'|format(p.name) }} = {{ p.default }}{{ "" if loop.last else "," }}{% if p.comment %}   // {{ p.comment }}{% endif %}
+
+{% endfor %}
+){% endif %} (
+{% for p in ports %}
+    {{ '%-7s'|format(p.direction) }} wire {{ '%-8s'|format(p.width_str) }} {{ p.name }}{{ "" if loop.last else "," }}{% if p.group %}  // {{ p.group }}{% if p.role and p.role not in ('in','out') %} ({{ p.role }}){% endif %}{% endif %}
+
+{% endfor %}
+);
+
+{% if internal_wires %}
+    //=========================================================================
+    // Internal nets (inner-SoC out/oe legs + status taps)
+    //=========================================================================
+{% for w in internal_wires %}
+    wire {{ '%-8s'|format(w.width_str) }} {{ w.name }};
+{% endfor %}
+
+{% endif %}
+{% if tristate_assigns %}
+    //=========================================================================
+    // Tristate adapters (Vivado IOBUF convention: _t = 1 -> Hi-Z)
+    //=========================================================================
+{% for a in tristate_assigns %}
+    assign {{ a.lhs }} = {{ a.rhs }};
+{% endfor %}
+
+{% endif %}
+{% if tap_assigns %}
+    //=========================================================================
+    // Status / debug routing
+    //=========================================================================
+{% for a in tap_assigns %}
+    assign {{ a.lhs }} = {{ a.rhs }};{% if a.comment %}  // {{ a.comment }}{% endif %}
+
+{% endfor %}
+
+{% endif %}
+{% if selfloop %}
+    //=========================================================================
+    // SYSRESETREQ self-loop (filtered)
+    //
+    // Either CPU can request a system reset (SCB->AIRCR or SWD `reset`). OR the
+    // two requests, 2-FF synchronise, gate with a 10-bit startup guard, and
+    // feed sysresetreq_filt back into the inner SoC's sys_sysresetreq.
+    //=========================================================================
+    wire cpu_sysresetreq_any = {{ selfloop.taps | join(' | ') }};
+
+    reg [1:0] sysresetreq_sync;
+    reg [9:0] startup_cnt;
+    reg       startup_done;
+
+    always @(posedge {{ selfloop.source | default('sys_fclk') }} or negedge nrst) begin
+        if (!nrst) begin
+            sysresetreq_sync <= 2'b00;
+            startup_cnt      <= 10'd0;
+            startup_done     <= 1'b0;
+        end else begin
+            sysresetreq_sync <= {sysresetreq_sync[0], cpu_sysresetreq_any};
+            if (!startup_done) begin
+                if (&startup_cnt)
+                    startup_done <= 1'b1;
+                else
+                    startup_cnt  <= startup_cnt + 1'b1;
+            end
+        end
+    end
+
+    wire sysresetreq_filt = sysresetreq_sync[1] & startup_done;
+
+{% endif %}
+{% if sysresetreq_isolate %}
+    //=========================================================================
+    // SYSRESETREQ per-core isolation (Round-8 HW bug #1 fix)
+    //
+    // Each core's SYSRESETREQ (SCB->AIRCR / SWD `reset`) is routed INSIDE the
+    // SoC to its dedicated nanosoc_reset_ctrl per-core input, which asserts only
+    // that core's resetn (per-core reset). The wrapper does NOT loop SYSRESETREQ
+    // back into the inner SoC's GLOBAL sys_sysresetreq — doing so rebooted BOTH
+    // cores + the shared fabric (PHC / IPC / ring) on a single core's reset.
+    // sys_sysresetreq is reserved for a genuine EXTERNAL system reset; this board
+    // has no such source, so it stays tied inactive (boundary tie 1'b0). The two
+    // cpu_*_sysresetreq outputs stay observed (collected into a harmless unused
+    // sink) so they do not dangle.
+    //=========================================================================
+    wire _unused_sysresetreq = &{1'b0{% for t in sysresetreq_isolate.taps %}, {{ t }}{% endfor %}};
+
+{% endif %}
+{% for t in terminators %}
+    //=========================================================================
+    // {{ t.instance }} ({{ t.module }}) — terminator
+    //
+    // An inner bus port with nothing attached on this FPGA target. A constant
+    // tie cannot express a bus response, and leaving the port UNCONNECTED is
+    // worse still: Vivado ties an unconnected input to 0, so a dropped `hready`
+    // wedges the bus matrix rather than merely floating. This helper answers.
+    //=========================================================================
+{% if t.desc %}
+    // {{ t.desc }}
+{% endif %}
+{% for w in t.wires %}
+    wire {{ '%-8s'|format(w.width_str) }} {{ w.name }};
+{% endfor %}
+
+    {{ t.module }}{% if t.params %} #(
+{% for p in t.params %}
+        .{{ '%-14s'|format(p.name) }} ({{ p.value }}){{ "" if loop.last else "," }}
+{% endfor %}
+    ){% endif %} {{ t.instance }} (
+{% for c in t.conns %}
+        .{{ '%-20s'|format(c.port) }} ({{ c.expr }}){{ "" if loop.last else "," }}
+{% endfor %}
+    );
+
+{% endfor %}
+    //=========================================================================
+    // {{ inner_module }} — inner SoC top
+    //   bonded -> wrapper net ; tied -> constant ; open -> unconnected ;
+    //   tap/feature -> bespoke FPGA glue ; terminated -> terminator wire
+    //=========================================================================
+    {{ inner_module }}{% if param_overrides %} #(
+{% for p in param_overrides %}
+        .{{ '%-22s'|format(p.name) }} ({{ p.name }}){{ "" if loop.last else "," }}
+{% endfor %}
+    ){% endif %} u_soc (
+{% for c in connections %}
+{% if c.kind == 'open' %}
+        .{{ '%-20s'|format(c.port) }} (){{ "" if loop.last else "," }}  // open{% if c.comment %} ({{ c.comment }}){% endif %}
+
+{% elif c.kind == 'tied' %}
+        .{{ '%-20s'|format(c.port) }} ({{ c.expr }}){{ "" if loop.last else "," }}  // tied{% if c.comment %} ({{ c.comment }}){% endif %}
+
+{% elif c.kind in ('tap', 'feature', 'feature_tap', 'terminated') %}
+        .{{ '%-20s'|format(c.port) }} ({{ c.expr }}){{ "" if loop.last else "," }}  // {{ c.kind }}{% if c.comment %} ({{ c.comment }}){% endif %}
+
+{% else %}
+        .{{ '%-20s'|format(c.port) }} ({{ c.expr }}){{ "" if loop.last else "," }}
+{% endif %}
+{% endfor %}
+    );
+
+endmodule

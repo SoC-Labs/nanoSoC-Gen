@@ -1,0 +1,30 @@
+# Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+# SPDX-License-Identifier: Apache-2.0
+# Hermetic MIXED-I/O pad-ring fixture: one pad of every kind (single + bus),
+# both OE polarities, a `pad:` name override, and a small power ring. Faithful
+# to the multicore shape in miniature so the unit tests stay fast/submodule-free.
+pin_map:
+  tech:         generic
+  pin_count:    20
+  mode:         mixed
+  chip_module:  mixedfix_chip
+  body_flavour: direct
+  boundary_supplies: none
+  pads:
+    # single input
+    - { name: clk_in,   kind: input,  in: clk_in }
+    # single output (+ pad-name override)
+    - { name: led_out,  kind: output, out: led_out, pad: LED }
+    # bus input
+    - { name: rxd,      kind: input,  width: 2, in: rxd }
+    # bus output
+    - { name: txd,      kind: output, width: 2, out: txd }
+    # tristate output, active-LOW oe (straight-through to OEN)
+    - { name: tdo, kind: tristate_out, out: tdo_o, oe: tdo_noe, oe_polarity: active_low }
+    # scalar bidir, active-high oe (inverted into _z)
+    - { name: sda, kind: bidir, in: sda_i, out: sda_o, oe: sda_oe, oe_polarity: active_high }
+    # bus bidir (4-bit), active-high oe
+    - { name: io, kind: bidir, width: 4, in: io_i, out: io_o, oe: io_e, oe_polarity: active_high }
+  power_pads:
+    - { cell: PAD_VDDIO, prefix: uPAD_VDDIO, count: 2, net: VDDIO }
+    - { cell: PAD_VSS,   prefix: uPAD_VSS,   count: 2, net: VSS }

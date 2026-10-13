@@ -1,0 +1,9 @@
+component:
+  id: sram_block
+  module: tiny_region
+  category: memory
+  label: "SRAM Block"
+  desc: "General-purpose on-chip SRAM."
+  knobs:
+    - { param: RAM_ADDR_W, label: "Capacity", kind: addr_w,
+        default: 12, min: 10, max: 16, desc: "SRAM byte-address width." }

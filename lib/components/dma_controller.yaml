@@ -1,0 +1,30 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Droppable component package — DMA controller (configurator doc 06a).
+# Grounds: nanosoc-multicore-system/sys_desc/dma_250_ahb.yaml (module dma_250_ahb).
+component:
+  id: dma_controller
+  module: dma_250_ahb
+  category: dma
+  label: "DMA Controller"
+  desc: "Arm CoreLink DMA-250 wrapper: one AHB-Lite data master plus an APB
+    configuration slave, with per-channel done/request and an OR-reduced error.
+    Drop in to add bulk memory-to-memory / peripheral copy off the CPU."
+  window_size: 16K
+  knobs:
+    - { param: CHANNEL_NUM, label: "DMA channels", kind: int,
+        default: 4, min: 1, max: 8,
+        desc: "SoC-facing DMA_DONE/DMA_REQ width (kept at the PL230 channel
+          count for drop-in event-routing compatibility)." }
+    - { param: NUM_VCH, label: "Virtual channels", kind: int,
+        default: 2, min: 1, max: 4,
+        desc: "DMA-250 virtual channels in the rendered config (cfg_min = 2).
+          Also sizes the wrapper's private context RAM: the DMA-250 context
+          layout is a fixed 64 B slot per virtual channel, so the wrapper
+          derives CTX_AW = 6 + clog2(NUM_VCH) (128 B at cfg_min) and the
+          context store synthesises to a small flop array - no SRAM macro." }
+    # CFG_ADDR_W must be >= 14 for the DMA-250 (channel-0 registers begin at
+    # offset 0x1000 inside the 16 KB register space) — that is the HARD floor.
+    - { param: CFG_ADDR_W, label: "Config aperture", kind: addr_w,
+        default: 14, min: 14, max: 16,
+        desc: "APB configuration address width; the DMA-250 register space is
+          16 KB so this must be at least 14." }

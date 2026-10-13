@@ -1,0 +1,89 @@
+//-----------------------------------------------------------------------------
+// {{ module_name }} — System Integration Level
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Template:  soc_system.sv.j2
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+// This module wraps the nanosoc core and connects its expansion region port
+// (EXP) to a user-replaceable expansion region. By default, a
+// cmsdk_ahb_default_slave is placed on the expansion AHB port.
+//
+// USER: To add your own accelerator, replace the u_region_exp instance
+// (nanosoc_region_exp_default) with your own module. Your module must
+// provide the same AHB slave + AXI-Stream + IRQ/DMA interface. Remove the
+// default slave and connect your accelerator's ports instead.
+//-----------------------------------------------------------------------------
+
+module {{ module_name }} #(
+{% for p in params %}
+{% if p.type == 'str' %}
+    parameter          {{ "%-24s" | format(p.name) }} = "{{ p.default }}"{{ ',' if not loop.last else '' }}  // {{ p.desc }}
+{% elif p.type == 'int' %}
+    parameter          {{ "%-24s" | format(p.name) }} = {{ p.default }}{{ ',' if not loop.last else '' }}  // {{ p.desc }}
+{% else %}
+    parameter          {{ "%-24s" | format(p.name) }} = {{ p.default }}{{ ',' if not loop.last else '' }}  // {{ p.desc }}
+{% endif %}
+{% endfor %}
+) (
+{% for port in ports %}
+{% if port.width_str %}
+    {{ "%-7s" | format(port.direction) }} wire {{ "%-20s" | format(port.width_str) }} {{ port.name }}{{ ',' if not loop.last else '' }}  // {{ port.desc }}
+{% else %}
+    {{ "%-7s" | format(port.direction) }} wire {{ "%-20s" | format('') }} {{ port.name }}{{ ',' if not loop.last else '' }}  // {{ port.desc }}
+{% endif %}
+{% endfor %}
+);
+
+    //=========================================================================
+    // Internal Wires
+    //=========================================================================
+{% for w in internal_wires %}
+{% if w.width_str %}
+    wire {{ "%-20s" | format(w.width_str) }} {{ w.name }};  // {{ w.desc }}
+{% else %}
+    wire {{ "%-20s" | format('') }} {{ w.name }};  // {{ w.desc }}
+{% endif %}
+{% endfor %}
+
+    //=========================================================================
+    // Module Instances
+    //=========================================================================
+{% for inst in instances %}
+
+{% if inst.is_expansion %}
+    //-------------------------------------------------------------------------
+    // Expansion Region — USER: Replace this with your own accelerator IP
+    //
+    // The default expansion region (nanosoc_region_exp_default) instantiates
+    // a cmsdk_ahb_default_slave which returns AHB error responses. All
+    // AXI-Stream outputs are tied inactive, IRQs and DMA requests are low.
+    //
+    // To integrate your accelerator:
+    //   1. Replace nanosoc_region_exp_default with your module name
+    //   2. Connect the AHB slave port to your accelerator's bus interface
+    //   3. Connect AXI-Stream channels for DMA data transfer
+    //   4. Drive EXP_IRQ and EXP_DRQ for interrupt and DMA signalling
+    //-------------------------------------------------------------------------
+{% else %}
+    // --- {{ inst.module_name }} ---
+{% endif %}
+    {{ inst.module_name }}{% if inst.params %} #(
+{% for p in inst.params %}
+        .{{ "%-24s" | format(p.name) }}({{ p.value }}){{ ',' if not loop.last else '' }}
+{% endfor %}
+    ){% endif %} {{ inst.instance_name }} (
+{% for c in inst.connections %}
+{% if c.signal is none %}
+        .{{ "%-28s" | format(c.port) }}( ){{ ',' if not loop.last else '' }}  // {{ c.desc if c.desc else 'unconnected' }}
+{% else %}
+        .{{ "%-28s" | format(c.port) }}({{ c.signal }}){{ ',' if not loop.last else '' }}
+{% endif %}
+{% endfor %}
+    );
+{% endfor %}
+
+endmodule

@@ -1,0 +1,19 @@
+# .ip-guard-allow.txt -- files the SoC Labs IP guard permits DESPITE matching its signatures.
+#
+# Read by tools/soclab_ip_checker (the QuickStart repository's ip-guard) when it audits this
+# tree with the QuickStart .ip-guard.toml (allow_file = ".ip-guard-allow.txt"). Each entry is
+# the sha256 of a file's exact bytes, with NO path (a "<sha256> <path>" line would allow ANY
+# content at that path), so the path is only in the comment. Editing the file changes its hash
+# and the guard blocks it again: update the hash here in the same commit, with a reviewer.
+#
+# tests/golden/__snapshots__/cmsdk_mux_shared/two_region_ahb_interconnect_lite.v
+#   The golden of this generator's own cmsdk_mux interconnect core for a fixture with three
+#   slave-mux ports enabled. Its cmsdk_ahb_slave_mux parameter list (".PORT0_ENABLE(1)," ...
+#   ".PORT9_ENABLE(0),", one per line) is instantiation boilerplate written by
+#   soc_model/backends/templates/ahb_interconnect_cmsdk_mux_lite.v.j2, not Arm text; it
+#   matches 3 eight-line windows of an Arm example testbench only because that example also
+#   enables exactly three ports. The template is NOT changed for this: a new emitted form
+#   would change every cmsdk_mux consumer's committed interconnect RTL, and the QuickStart's
+#   two interconnects (other port counts) do not match. Decision recorded in the Train 9
+#   consumer notice.
+32b9b3fa8595e986ecd5e7757d70c4d09ef697531db2c0955781176c1a02b14f  # tests/golden/__snapshots__/cmsdk_mux_shared/two_region_ahb_interconnect_lite.v

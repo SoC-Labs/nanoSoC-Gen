@@ -1,0 +1,44 @@
+//-----------------------------------------------------------------------------
+// SoC Configuration Package
+//
+// Contributors
+//
+// David Mapstone (d.a.mapstone@soton.ac.uk)
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Source:    {{ source_yaml }}
+// Template:  {{ template_name }}
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+//
+// SystemVerilog package derived from the interconnect address map YAML.
+// Contains target base addresses, apertures, and user-defined config
+// parameters for each target.
+//
+//-----------------------------------------------------------------------------
+
+package {{ package_name }};
+
+  // =========================================================================
+  // Address Map — target base addresses and apertures
+  // =========================================================================
+{% for target in all_target_info %}
+  localparam logic [{{ addr_width - 1 }}:0] {{ target.name | upper }}_BASE     = {{ addr_width }}'h{{ '%0*x' % ((addr_width + 3) // 4, target.base) }};
+  localparam logic [{{ addr_width - 1 }}:0] {{ target.name | upper }}_APERTURE = {{ addr_width }}'h{{ '%0*x' % ((addr_width + 3) // 4, target.aperture) }};
+{% endfor %}
+{% for target in all_target_info %}
+{% if target.config %}
+
+  // =========================================================================
+  // Configuration — {{ target.name }}
+  // =========================================================================
+{% for key, value in target.config.items() %}
+  localparam int {{ key }} = {{ value }};
+{% endfor %}
+{% endif %}
+{% endfor %}
+
+endpackage

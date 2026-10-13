@@ -1,0 +1,71 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Fixture for the discovery size guard (soc_model/backends/mem_size_guard.py,
+# tests/unit/test_mem_size_guard.py). A top with a RAM region, a boot ROM
+# region and a gen:True subsystem whose own RAM width the top overrides
+# (15 -> 13): every way a discovery table has disagreed with the memory behind
+# it. The tests replace the @..._PHYS@ tokens with a phys_size and pick the
+# boot ROM wrapper (byte or word slice) through --rtl-flist.
+module:
+  name: mem_guard_soc
+  gen: True
+  desc: "Discovery size guard fixture"
+  params:
+    SYS_CLK_FREQ_HZ: { type: int, default: 50000000, desc: "System clock" }
+    SYS_ADDR_W:      { type: int, default: 32, desc: "System address width" }
+    SYS_DATA_W:      { type: int, default: 32, desc: "System data width" }
+    RAM_W:           { type: int, default: 12, desc: "RAM byte address width (4 KB)" }
+    ROM_W:           { type: int, default: 11, desc: "Boot ROM region ROM_ADDR_W (unit: its wrapper's)" }
+    SS_IMEM_W:       { type: int, default: 13, desc: "The subsystem's IMEM width; its own default is 15" }
+  clocks:
+    - { name: sys_hclk, source: external, desc: "AHB clock" }
+  resets:
+    - { name: sys_hresetn, active: low, source: external, desc: "AHB reset" }
+  interfaces:
+    - { name: sys_hclk,    type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB clock in" }
+    - { name: sys_hresetn, type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB reset in" }
+    - { name: cpu_m, type: ahb, direction: initiator, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W }, desc: "CPU AHB master-out" }
+  instances:
+    - instance_name: u_ram_0
+      module: guard_ram_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $RAM_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: mem_guard_ic.ram_0 }
+    - instance_name: u_rom_0
+      module: guard_rom_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, ROM_ADDR_W: $ROM_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: ahb_slave, conn: mem_guard_ic.rom_0 }
+    - instance_name: u_ss_0
+      module: guard_ss
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, IMEM_W: $SS_IMEM_W }
+      connections:
+        - { port: sys_hclk,    conn: sys_hclk }
+        - { port: sys_hresetn, conn: sys_hresetn }
+        - { port: sub_s,       conn: mem_guard_ic.ss_0_slave }
+  interconnects:
+    - name: mem_guard_ic
+      gen: True
+      type: ahb_lite
+      desc: "Guard fixture interconnect"
+      params:
+        SYS_ADDR_W: $SYS_ADDR_W
+        SYS_DATA_W: $SYS_DATA_W
+      connections:
+        - { port: sys_hclk,    conn: sys_hclk }
+        - { port: sys_hresetn, conn: sys_hresetn }
+      targets:
+        - { name: ram_0, instance: u_ram_0, base: 0x00000000, size: 0x10000000, sw_access: rwx, region_type: memory, phys_size: "@RAM_PHYS@", desc: "RAM" }
+        - { name: rom_0, instance: u_rom_0, base: 0x10000000, size: 0x10000000, sw_access: rx, region_type: memory, phys_size: "@ROM_PHYS@", desc: "Boot ROM" }
+        - { name: ss_0_slave, base: 0x80000000, size: 0x20000000, sw_access: rwx, region_type: ~, role: ~, desc: "Subsystem window" }
+      initiators:
+        - name: cpu_m
+          targets:
+            - name: ram_0
+            - name: rom_0
+            - name: ss_0_slave

@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# nanosoc_gen configurator pre-commit hook (doc 06a #13).
+#
+# Runs the headless `soc_model.configurator check` (tiers 1-3 validation) on the
+# project's top SoC YAML whenever a staged file touches the configurator's top
+# YAML or any of its lib dirs, and BLOCKS the commit on any error-level finding.
+# It needs no web deps and finishes in seconds (no BuildBusMatrix), so it is the
+# cheapest possible "GUI-green == CI-green" gate — and it catches the lib-dir /
+# region-YAML edits that set_env.sh's top-mtime auto-regen silently misses.
+#
+# Skips gracefully (exit 0) when the project has no configurator.yaml, when
+# soc_model isn't importable, or when no staged file is relevant — so it never
+# blocks unrelated repos/commits. Override a real block with `--no-verify`.
+#
+# Install:  scripts/hooks/install.sh        (from the project root)
+#   or:     ln -sf <this file> .git/hooks/pre-commit
+#
+# Env: SOC_MODEL_PYTHON overrides the interpreter (default: python3).
+set -euo pipefail
+
+PYTHON="${SOC_MODEL_PYTHON:-python3}"
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+CFG="$ROOT/configurator.yaml"
+
+# Only act on projects wired for the configurator.
+[ -f "$CFG" ] || exit 0
+# soc_model must be importable; otherwise skip rather than block.
+"$PYTHON" -c 'import soc_model.configurator' >/dev/null 2>&1 || exit 0
+
+# Resolve top_yaml + lib_dirs via the SAME adapter loader the app uses, so the
+# hook never drifts from the configurator's own resolution. Line 1 = top_yaml
+# (relative to root); lines 2.. = lib dirs (relative).
+META="$("$PYTHON" - "$ROOT" <<'PYEOF'
+import sys
+from soc_model.configurator.project import load_project
+a = load_project(sys.argv[1])
+print(a.top_yaml or '')
+for d in a.lib_dirs:
+    print(d)
+PYEOF
+)"
+TOP="$(printf '%s\n' "$META" | sed -n '1p')"
+[ -n "$TOP" ] || exit 0
+LIBDIRS="$(printf '%s\n' "$META" | tail -n +2)"
+
+# Is any staged (added/copied/modified) file the top YAML or under a lib dir?
+relevant=0
+while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    if [ "$f" = "$TOP" ]; then relevant=1; break; fi
+    while IFS= read -r d; do
+        [ -n "$d" ] || continue
+        case "$f" in "$d"/*|"$d") relevant=1; break;; esac
+    done <<< "$LIBDIRS"
+    [ "$relevant" = 1 ] && break
+done < <(git diff --cached --name-only --diff-filter=ACM)
+
+[ "$relevant" = 1 ] || exit 0
+
+echo "[pre-commit] configurator check on $TOP (staged sys_desc/lib edit)…"
+if "$PYTHON" -m soc_model.configurator check "$ROOT/$TOP" --project "$ROOT"; then
+    exit 0
+fi
+echo "[pre-commit] BLOCKED: configurator check found error-level issue(s)." >&2
+echo "             Fix them, or 'git commit --no-verify' to override." >&2
+exit 1

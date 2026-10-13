@@ -1,0 +1,25 @@
+//-----------------------------------------------------------------------------
+// SoC Top-Level Generated IP Filelist
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Template:  soc_toplevel.flist.j2
+// Generated: 2026-06-16 14:55:42
+//-----------------------------------------------------------------------------
+
+// ============= Verilog library extensions ===========
++libext+.v+.vlib+.sv
+
+// =============    Generated Top-Level Module    =============
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/firmware_soc.sv
+
+// =============    Structural Glue Logic Helpers    =============
+$(SOCLABS_NANOSOC_GEN_DIR)/rtl/soc_glue/soc_glue_passthrough.sv
+$(SOCLABS_NANOSOC_GEN_DIR)/rtl/soc_glue/soc_glue_or_reduce.sv
+$(SOCLABS_NANOSOC_GEN_DIR)/rtl/soc_glue/soc_glue_or_combine.sv
+$(SOCLABS_NANOSOC_GEN_DIR)/rtl/soc_glue/soc_glue_and_gate.sv
+$(SOCLABS_NANOSOC_GEN_DIR)/rtl/soc_glue/soc_glue_constant.sv
+$(SOCLABS_NANOSOC_GEN_DIR)/rtl/soc_glue/soc_glue_mux2.sv
+$(SOCLABS_NANOSOC_GEN_DIR)/rtl/soc_glue/soc_glue_reset_sync.sv

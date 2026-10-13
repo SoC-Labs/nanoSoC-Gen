@@ -1,0 +1,57 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# ---------------------------------------------------------------------------
+# Example SoC configuration validity matrix (roadmap doc 03).
+#
+# Each entry generates one isolated build and runs up to `tier`.
+#   overrides:    map 1:1 onto --config-override KEY=VALUE (declared top params).
+#                 For the in-process tier they are applied to params[*].default.
+#   yaml:         alternative to overrides — point at an edited top-level YAML
+#                 fixture (for variations that aren't param-expressible, e.g. a
+#                 base/size relayout overlap test).
+#   tier:         deepest tier this config must clear (cost-control lever).
+#   expect_fail:  marks a negative config; the driver inverts the verdict
+#                 (green only if it fails as declared).
+#
+# This example runs against the hermetic test fixtures so it is laptop-runnable
+# with no EDA license:
+#   python3 ci/matrix.py --matrix ci/example_matrix.yaml --tier validate \
+#       --base-yaml tests/fixtures/two_region_soc.yaml --base-dir tests/fixtures
+#
+# In the SUPERPROJECT deployment, set base_yaml to
+# sys_desc/nanosoc_multicore_soc.yaml and lib_dirs to the 8 sys_desc LIB_DIRS
+# (fetch via `make -C sys_desc print-libdirs`), and the same configs below
+# (CC_IMEM_RAM_ADDR_W, QSPI_FLASH_ADDR_W, DMAC_*_TYPE, ...) apply unchanged.
+# ---------------------------------------------------------------------------
+defaults:
+  tier: validate
+  base_yaml: tests/fixtures/two_region_soc.yaml
+  base_dir: tests/fixtures
+  lib_dirs: [tests/fixtures]
+
+configs:
+  - name: default
+    desc: "Golden — fixture defaults (matches the soc_gen job today)"
+    overrides: {}
+
+  - name: bigger_sram
+    desc: "Resized SRAM backing store (param-driven width sweep)"
+    overrides:
+      SRAM_RAM_ADDR_W: 16
+
+  - name: relayout_ok
+    desc: "Base/window relayout that stays disjoint — must PASS Tier-1"
+    yaml: ci/fixtures/relayout_ok.yaml
+
+  - name: relayout_overlap
+    desc: "Base/window collision (sram_1 into sram_0) — must FAIL Tier-1 overlap"
+    yaml: ci/fixtures/relayout_overlap.yaml
+    expect_fail: validate
+
+# Optional cartesian sugar: a small swept axis over a base config. Gated to the
+# free validate tier.
+axes:
+  - name: sram_width_sweep
+    base: default
+    tier: validate
+    grid:
+      SRAM_RAM_ADDR_W: [12, 14, 16]

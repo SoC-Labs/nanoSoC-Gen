@@ -1,0 +1,7 @@
+# The project's override: it has swdio.
+module:
+  name: dut_child
+  gen: False
+  interfaces:
+    - { name: clk,   type: wire, direction: in, params: { WIDTH: 1 } }
+    - { name: swdio, type: wire, direction: in, params: { WIDTH: 1 } }

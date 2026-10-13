@@ -1,0 +1,28 @@
+# Minimal repro: validator "Port '...' not found on module" false positives for
+# bundle members of a hand-written (gen: False) module. From the QuickStart superproject docs/mcp-plan-2026-10-08/repro-bundle-ports (GEN-BACKLOG 20).
+module:
+  name: repro_top
+  gen: False
+  interfaces:
+    - { name: clk, type: wire, direction: in, params: { WIDTH: 1 } }
+  internal_wires:
+    - { name: tx_valid, type: wire, params: { WIDTH: 1 } }
+    - { name: tx_data,  type: wire, params: { WIDTH: 8 } }
+    - { name: tx_ready, type: wire, params: { WIDTH: 1 } }
+    - { name: p0_in,    type: wire, params: { WIDTH: 16 } }
+    - { name: psel,     type: wire, params: { WIDTH: 1 } }
+    - { name: typo_net, type: wire, params: { WIDTH: 1 } }
+    - { name: adp_valid, type: wire, params: { WIDTH: 1 } }
+  instances:
+    - instance_name: u_periph
+      module: hw_periph
+      connections:
+        - { port: HCLK,             conn: clk }
+        - { port: USRT0_TXD_TVALID, conn: tx_valid }   # pattern 1: case of the member suffix
+        - { port: USRT0_TXD_TDATA,  conn: tx_data }
+        - { port: USRT0_TXD_TREADY, conn: tx_ready }
+        - { port: P0_IN,            conn: p0_in }      # pattern 1 (gpio)
+        - { port: DEBUG_PSEL,       conn: psel }       # pattern 2: APB members named <base minus _APB>_P<sig>
+        - { port: txd_tlast,        conn: unconnected } # pattern 3: axis_byte member the adapter table lacks
+        - { port: ADP_RXD_TVALID_o, conn: adp_valid }  # pattern 4: RTL direction suffix _o/_i
+        - { port: USRT0_TXD_TVALIX, conn: typo_net }   # CONTROL: a real typo, must still warn

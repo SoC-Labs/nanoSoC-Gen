@@ -1,0 +1,15 @@
+# GEN-BACKLOG 23: the same module in two lib dirs; the LAST lib dir wins.
+# proj/dut_child has the swdio port this top connects; arch/dut_child does not
+# (as arch_tech's nanosoc_ss_cpu lacks the QuickStart's cpu_0_swd).
+module:
+  name: lib_top
+  gen: False
+  interfaces:
+    - { name: clk,   type: wire, direction: in, params: { WIDTH: 1 } }
+    - { name: swdio, type: wire, direction: in, params: { WIDTH: 1 } }
+  instances:
+    - instance_name: u_child
+      module: dut_child
+      connections:
+        - { port: clk,   conn: clk }
+        - { port: swdio, conn: swdio }

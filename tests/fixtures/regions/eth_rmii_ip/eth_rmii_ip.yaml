@@ -1,0 +1,61 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Hermetic fixture IP — a pre-verified Ethernet RMII subsystem that carries its
+# OWN timing constraints (the constraints: block). The constraints backend
+# aggregates these up to the top-level SDC/XDC, demonstrating the
+# pre-verified-IP story: drop the IP in and its timing intent travels with it.
+#
+# The constraints below mirror the real nanosoc_multicore_timing.xdc RMII
+# intent: a 50 MHz RMII reference clock, the two /2 MII RX/TX generated clocks,
+# the sys<->rmii asynchronous clock group, and the RMII source-synchronous
+# input/output delays.
+
+module:
+  name: eth_rmii_ip
+  gen: False
+  desc: >
+    Minimal pre-verified Ethernet RMII subsystem fixture carrying its own
+    timing constraints (clocks + generated clocks + async group + io-delays).
+
+  params:
+    SYS_ADDR_W: { type: int, default: 32 }
+    SYS_DATA_W: { type: int, default: 32 }
+
+  interfaces:
+    - { name: HCLK,         type: wire, direction: in,  params: { WIDTH: 1 }, desc: AHB clock }
+    - { name: HRESETn,      type: wire, direction: in,  params: { WIDTH: 1 }, desc: AHB reset }
+    - { name: rmii_ref_clk, type: wire, direction: in,  params: { WIDTH: 1 }, desc: 50 MHz RMII reference clock }
+    - { name: ahb_slave,    type: ahb,  direction: target, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W, EXCLUDE: [hburst, hmastlock] }, desc: AHB slave port }
+
+  # ---- PRE-VERIFIED-IP TIMING CONSTRAINTS -------------------------------
+  constraints:
+    scope: fpga                     # this IP is FPGA-targeted (XDC only)
+
+    clocks:
+      - { name: rmii_ref_clk, port: rmii_ref_clk, freq_hz: 50000000,
+          desc: "50 MHz RMII reference clock from the LAN8720 PHY" }
+
+    generated_clocks:
+      - name: mii_rx_clk
+        divide_by: 2
+        source_pin: "*u_rmii_to_mii/mrx_clk_reg/C"
+        target_pin: "*u_rmii_to_mii/mrx_clk_reg/Q"
+        desc: "RMII /2 MII RX clock (25 MHz)"
+      - name: mii_tx_clk
+        divide_by: 2
+        source_pin: "*u_rmii_to_mii/mtx_clk_reg/C"
+        target_pin: "*u_rmii_to_mii/mtx_clk_reg/Q"
+        desc: "RMII /2 MII TX clock (25 MHz)"
+
+    clock_groups:
+      - name: async_sys_rmii
+        groups:
+          - [sys_clk]
+          - [rmii_ref_clk, mii_rx_clk, mii_tx_clk]
+        desc: "25 MHz system clock async to the RMII ref + its /2 children"
+
+    io_delays:
+      - { kind: input,  clock: rmii_ref_clk, ports: ["phy_rmii_rxd[*]", "phy_rmii_crs_dv"], min: 2.0,  max: 14.0 }
+      - { kind: output, clock: rmii_ref_clk, ports: ["phy_rmii_txd[*]", "phy_rmii_tx_en"], min: -1.0, max: 5.0 }
+
+    false_paths:
+      - { to:   "phy_mdc", desc: "MDIO clock — software-rate divider, no fast path" }

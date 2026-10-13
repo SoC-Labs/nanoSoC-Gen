@@ -1,0 +1,31 @@
+#-----------------------------------------------------------------------------
+# AXI-Stream Byte Interface Definition
+# Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+# SPDX-License-Identifier: Apache-2.0
+#-----------------------------------------------------------------------------
+# Simplified 8-bit AXI-Stream interface for UART/USRT byte-level transfers.
+# No TSTRB, TLAST, or FLUSH — just valid/ready/data handshake.
+#
+# Each instance has a role:
+#   source — drives TVALID, TDATA; receives TREADY
+#   sink   — receives TVALID, TDATA; drives TREADY
+#
+# Usage:
+#   - interface: !include ../interfaces/axis_byte.yaml
+#     name: usrt0_txd
+#     role: source
+#-----------------------------------------------------------------------------
+
+interface:
+  name: axis_byte
+  description: AXI-Stream byte interface (8-bit, valid/ready only)
+  protocol: axi_stream
+
+  parameters:
+    DATA_W: { type: int, default: 8, description: Data width (fixed 8-bit) }
+
+  # Signals from source perspective; sink inverts directions
+  signals:
+    - { name: tvalid, direction: out, width: 1,         description: Transfer valid }
+    - { name: tready, direction: in,  width: 1,         description: Transfer ready }
+    - { name: tdata,  direction: out, width: ${DATA_W}, description: Transfer data byte }

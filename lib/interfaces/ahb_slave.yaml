@@ -1,0 +1,42 @@
+#-----------------------------------------------------------------------------
+# AHB-Lite Slave (Target) Interface Definition
+# Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+# SPDX-License-Identifier: Apache-2.0
+#-----------------------------------------------------------------------------
+# Standard AHB-Lite slave interface. Used by memory and peripheral regions.
+# Directly maps to ARM AMBA 2.0 AHB-Lite subordinate port signals.
+#
+# Parameters:
+#   ADDR_W — address width (default 32)
+#   DATA_W — data width (default 32)
+#
+# Usage in a component ports list:
+#   - interface: !include ../interfaces/ahb_slave.yaml
+#     name: soc_peripheral       # prefix applied to all signals
+#     parameters: { ADDR_W: 32, DATA_W: 32 }
+#-----------------------------------------------------------------------------
+
+interface:
+  name: ahb_slave
+  description: AHB-Lite slave (target) port
+  protocol: ahb_lite
+  role: slave
+
+  parameters:
+    ADDR_W: { type: int, default: 32, description: Address width }
+    DATA_W: { type: int, default: 32, description: Data width }
+
+  signals:
+    - { name: hsel,      direction: in,  width: 1,         description: AHB slave select }
+    - { name: haddr,     direction: in,  width: ${ADDR_W}, description: AHB address }
+    - { name: htrans,    direction: in,  width: 2,         description: AHB transfer type }
+    - { name: hwrite,    direction: in,  width: 1,         description: AHB write }
+    - { name: hsize,     direction: in,  width: 3,         description: AHB size }
+    - { name: hburst,    direction: in,  width: 3,         description: AHB burst type }
+    - { name: hprot,     direction: in,  width: 4,         description: AHB protection }
+    - { name: hwdata,    direction: in,  width: ${DATA_W}, description: AHB write data }
+    - { name: hmastlock, direction: in,  width: 1,         description: AHB master lock }
+    - { name: hready,    direction: in,  width: 1,         description: AHB ready in }
+    - { name: hrdata,    direction: out, width: ${DATA_W}, description: AHB read data }
+    - { name: hresp,     direction: out, width: 1,         description: AHB response }
+    - { name: hreadyout, direction: out, width: 1,         description: AHB ready out }

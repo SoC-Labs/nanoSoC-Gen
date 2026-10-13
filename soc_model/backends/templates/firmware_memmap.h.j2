@@ -1,0 +1,31 @@
+/*
+ * Auto-generated memory map header
+ * Source:    {{ source_yaml }}
+ * Generated: {{ generated_date }}
+ *
+ * DO NOT EDIT — regenerate with gen_firmware_config.py
+ */
+
+#ifndef {{ guard_name }}
+#define {{ guard_name }}
+
+/* Memory region base addresses and sizes */
+{% for r in memory_regions %}
+#define {{ "%-40s" | format(r.define_name) }} ({{ r.base }}UL)  /* {{ r.comment }} */
+{% endfor %}
+{% if config_params %}
+
+/* Target configuration parameters */
+{% for p in config_params %}
+{% if p.overridable %}
+/* A build may override this with -D{{ p.define_name }}=<value> */
+#ifndef {{ p.define_name }}
+#define {{ "%-40s" | format(p.define_name) }} ({{ p.value }})  /* {{ p.comment }} */
+#endif
+{% else %}
+#define {{ "%-40s" | format(p.define_name) }} ({{ p.value }})  /* {{ p.comment }} */
+{% endif %}
+{% endfor %}
+{% endif %}
+
+#endif /* {{ guard_name }} */

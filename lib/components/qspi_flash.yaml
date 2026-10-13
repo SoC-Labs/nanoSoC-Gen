@@ -1,0 +1,15 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+component:
+  id: qspi_flash_controller
+  module: qspi_flash_ahb
+  category: peripheral
+  label: "QSPI Flash Controller (XiP + cache)"
+  desc: "AHB QSPI flash controller with a CG092 read cache and execute-in-place
+    aperture for boot / XiP from external NOR flash."
+  window_size: 64M
+  knobs:
+    - { param: CACHE_SIZE, label: "Read cache", kind: bytes,
+        default: 4096, options: [2048, 4096, 8192, 16384],
+        desc: "CG092 read-cache capacity." }
+    - { param: FLASH_ADDR_W, label: "Flash aperture", kind: addr_w,
+        default: 22, min: 20, max: 26, desc: "External flash byte-address width." }

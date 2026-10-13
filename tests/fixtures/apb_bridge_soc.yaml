@@ -1,0 +1,83 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Fixture SoC exercising an AHB->APB target (protocol: apb, apb_config). One
+# SRAM target plus one APB-bridged peripheral target behind the interconnect.
+
+module:
+  name: apb_bridge_soc
+  gen: True
+  desc: >
+    AHB->APB bridge SoC fixture. One AHB-Lite interconnect with an SRAM target
+    and an APB-protocol peripheral target (tiny_apb_periph) reached via an
+    AHB-to-APB bridge described by apb_config.
+
+  params:
+    SYS_CLK_FREQ_HZ: { type: int, default: 50000000, desc: "System clock (50 MHz)" }
+    SYS_ADDR_W:      { type: int, default: 32, desc: "System address width" }
+    SYS_DATA_W:      { type: int, default: 32, desc: "System data width" }
+    APB_ADDR_W:      { type: int, default: 12, desc: "APB address width" }
+    APB_DATA_W:      { type: int, default: 32, desc: "APB data width" }
+    SRAM_RAM_ADDR_W: { type: int, default: 12, desc: "SRAM byte-address width (4 KB)" }
+
+  clocks:
+    - { name: sys_hclk, source: external, desc: "AHB clock" }
+
+  resets:
+    - { name: sys_hresetn, active: low, source: external, desc: "AHB reset" }
+
+  interfaces:
+    - { name: sys_hclk,    type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB clock in" }
+    - { name: sys_hresetn, type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB reset in" }
+    - { name: cpu_m, type: ahb, direction: initiator, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W }, desc: "CPU AHB master-out" }
+
+  instances:
+    - instance_name: u_sram_0
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $SRAM_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: apb_bridge_ahb_interconnect.sram_0 }
+
+    - instance_name: u_apb_periph_0
+      module: tiny_apb_periph
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, APB_ADDR_W: $APB_ADDR_W, APB_DATA_W: $APB_DATA_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: PCLK,      conn: sys_hclk }
+        - { port: PRESETn,   conn: sys_hresetn }
+        - { port: PCLKEN,    conn: 1'b1 }
+        - { port: ahb_slave, conn: apb_bridge_ahb_interconnect.apb_periph_0 }
+
+  interconnects:
+    - name: apb_bridge_ahb_interconnect
+      gen: True
+      type: ahb_lite
+      desc: "AHB-Lite interconnect with one APB-bridged target"
+      params:
+        SYS_ADDR_W: $SYS_ADDR_W
+        SYS_DATA_W: $SYS_DATA_W
+      connections:
+        - { port: sys_hclk,    conn: sys_hclk }
+        - { port: sys_hresetn, conn: sys_hresetn }
+      targets:
+        - { name: sram_0, instance: u_sram_0, base: 0x00000000, size: 0x00001000, sw_access: rwx, region_type: memory, phys_size: 0x00001000, desc: "On-chip SRAM" }
+        - name: apb_periph_0
+          instance: u_apb_periph_0
+          base: 0x40000000
+          size: 0x00001000
+          sw_access: rw
+          region_type: periph
+          protocol: apb
+          register_map: register_maps/tiny_regs.yaml
+          apb_config:
+            bridge: cmsdk_ahb_to_apb
+            params: { ADDRWIDTH: 12, REGISTER_RDATA: 1 }
+          desc: "APB peripheral via AHB-to-APB bridge"
+      initiators:
+        - name: cpu_m
+          targets:
+            - name: sram_0
+            - name: apb_periph_0

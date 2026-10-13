@@ -1,0 +1,38 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+#
+# nanosoc_gen preset (roadmap doc 05, Feature 1 — uses:/mixins).
+#
+# A preset is a PARTIAL module dict that a module pulls in with
+#   module:
+#     uses: [ahb_target_region]
+# The expander (soc_model/expand.py) deep-merges the preset UNDER the module's
+# own keys (module keys win): dicts recurse, identity-keyed list items
+# (name/instance_name/instance) replace, scalars are overridden. Presets are
+# opt-in — a module that does not list `uses:` is completely unaffected.
+#
+# This one captures the boilerplate shared by every AHB target region
+# (sram/imem/dmem/...): the SYS_/RAM_ width params, the HCLK/HRESETn wires, and
+# the standard ahb_slave target port. A region then only states what is unique
+# to it (its srams, any extra params). Convert a region with, e.g.:
+#
+#   module:
+#     name: nanosoc_region_sram
+#     gen: False
+#     uses: [ahb_target_region]
+#     srams:
+#       - { name: u_sram, addr_width: $RAM_ADDR_W, data_width: $RAM_DATA_W }
+preset:
+  name: ahb_target_region
+  params:
+    SYS_ADDR_W: { type: int, default: 32, desc: "System address width" }
+    SYS_DATA_W: { type: int, default: 32, desc: "System data width" }
+    RAM_ADDR_W: { type: int, default: 14, desc: "RAM address width (phys = 2^N bytes)" }
+    RAM_DATA_W: { type: int, default: 32, desc: "RAM data width" }
+  interfaces:
+    - { name: HCLK,    type: wire, direction: in, params: { WIDTH: 1 }, desc: AHB clock }
+    - { name: HRESETn, type: wire, direction: in, params: { WIDTH: 1 }, desc: AHB reset (active low) }
+    - name: ahb_slave
+      type: ahb
+      direction: target
+      params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W, EXCLUDE: [hburst, hmastlock] }
+      desc: AHB slave port

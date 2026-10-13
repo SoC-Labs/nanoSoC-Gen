@@ -1,0 +1,38 @@
+// Auto-generated SystemRDL for tiny_regs
+// Source: register_maps/tiny_regs.yaml
+// Minimal register map: CTRL + RO STATUS.
+
+regfile tiny_regs_regs {
+    default hw = r;
+
+    reg CTRL_t {
+        desc = "Control register";
+        field {
+            sw = rw;
+            reset = 1'h0;
+            desc = "Enable bit";
+        } ENABLE[0:0];
+        field {
+            sw = rw;
+            reset = 2'h0;
+            desc = "Mode select";
+        } MODE[2:1];
+    };
+    CTRL_t CTRL @0x000;
+
+    reg STATUS_t {
+        desc = "Status register";
+        field {
+            sw = r;
+            reset = 1'h0;
+            desc = "Busy flag";
+        } BUSY[0:0];
+    };
+    STATUS_t STATUS @0x004;
+
+};
+
+addrmap tiny_regs {
+    default accesswidth = 32;
+    tiny_regs_regs regs;
+};

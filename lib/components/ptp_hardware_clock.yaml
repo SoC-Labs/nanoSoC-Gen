@@ -1,0 +1,25 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Droppable component package — PTP Hardware Clock (configurator doc 06a).
+# Grounds: nanosoc-multicore-system/ethernet-subsystem-ahb/sys_desc/phc_ahb.yaml
+# (module phc_ahb).
+component:
+  id: ptp_hardware_clock
+  module: phc_ahb
+  category: peripheral
+  label: "PTP Hardware Clock"
+  desc: "IEEE 1588 PTP hardware clock: nanosecond timekeeping, dual hardware
+    servo source mux, Ethernet RX/TX timestamp capture, a programmable alarm
+    and a 1 PPS output, on an AHB slave port. Drop in next to an Ethernet
+    subsystem for hardware timestamping."
+  window_size: 4K
+  knobs:
+    # DEFAULT_NS_INCR is the nominal ns added per clock cycle; it tracks the
+    # PHC clock period (4 ns = 250 MHz). It is not a memory size, so no min/max
+    # limit — any positive increment is legal.
+    - { param: DEFAULT_NS_INCR, label: "ns per cycle", kind: int,
+        default: 4, unit: "ns",
+        desc: "Default nanosecond increment per clock cycle (4 ns => 250 MHz)." }
+    - { param: APB_ADDR_W, label: "Register aperture", kind: addr_w,
+        default: 12, min: 12, max: 14,
+        desc: "APB register address width; the 4 KB (12-bit) default holds the
+          PHC configuration and status register space." }

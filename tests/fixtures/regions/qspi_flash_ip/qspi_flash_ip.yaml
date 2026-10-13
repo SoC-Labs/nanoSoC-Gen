@@ -1,0 +1,42 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Hermetic fixture IP — a pre-verified QSPI flash controller carrying its own
+# timing constraints (the constraints: block). Demonstrates a SECOND IP
+# contributing a generated clock + io-delays that AGGREGATE with the Ethernet
+# IP's at the top level. Mirrors the real nanosoc_multicore_timing.xdc QSPI
+# intent: a HCLK/2 divided serial clock, forwarded to the SCK output port,
+# with Micron N25Q256A SDR read io-delays.
+
+module:
+  name: qspi_flash_ip
+  gen: False
+  desc: >
+    Minimal pre-verified QSPI flash controller fixture carrying its own QSPI
+    SCK generated clock + io-delays.
+
+  params:
+    SYS_ADDR_W: { type: int, default: 32 }
+    SYS_DATA_W: { type: int, default: 32 }
+
+  interfaces:
+    - { name: HCLK,    type: wire, direction: in,  params: { WIDTH: 1 }, desc: AHB clock }
+    - { name: HRESETn, type: wire, direction: in,  params: { WIDTH: 1 }, desc: AHB reset }
+    - { name: ahb_slave, type: ahb, direction: target, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W, EXCLUDE: [hburst, hmastlock] }, desc: AHB slave port }
+
+  constraints:
+    scope: fpga
+
+    generated_clocks:
+      - name: qspi_sclk_i
+        divide_by: 2
+        source_pin: "*clk_wiz_0/inst/clk_out1"
+        target_pin: "*u_qspi_clock_div*QSPI_SCLK_reg*/Q"
+        desc: "Internal HCLK/2 divided serial clock"
+      - name: qspi_sclk
+        divide_by: 1
+        source_pin: "*u_qspi_clock_div*QSPI_SCLK_reg*/Q"
+        target_pin: "qspi_sclk"
+        desc: "Forward the divided SCK to the output port for SCK->IO checks"
+
+    io_delays:
+      - { kind: output, clock: qspi_sclk, ports: ["qspi_io[*]", "qspi_ncs"], min: -1.0, max: 3.0 }
+      - { kind: input,  clock: qspi_sclk, ports: ["qspi_io[*]"],             min: 1.0,  max: 7.0 }

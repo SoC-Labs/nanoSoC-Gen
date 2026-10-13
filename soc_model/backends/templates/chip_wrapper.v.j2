@@ -1,0 +1,72 @@
+//-----------------------------------------------------------------------------
+// {{ chip_module }} — bonded chip-functional wrapper for {{ inner_module }}
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Template:  chip_wrapper.v.j2
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+// Thin structural wrapper around {{ inner_module }}:
+//   - re-exposes only the bonded inner ports 1:1 (in/out/oe nets),
+//   - drives {{ tie_count }} tied inner inputs to constants (NOT bonded),
+//   - leaves {{ open_count }} inner outputs unconnected (open),
+//   - wires {{ terminated_count }} inner ports to terminator helper instances.
+// Boundary classification ({{ port_count }} inner ports total) comes from the
+// editable chip-boundary spec; tie constants and the open list are reviewable.
+//-----------------------------------------------------------------------------
+
+`timescale 1ns/1ps
+
+module {{ chip_module }} (
+{% for p in boundary_ports %}
+    {{ '%-7s'|format(p.direction) }} wire {{ '%-8s'|format(p.width_str) }} {{ p.name }}{{ "" if loop.last else "," }}{% if p.pad and (p.pad != p.name) %}  // {{ p.group }}.{{ p.pad }} ({{ p.role }}){% elif p.group %}  // {{ p.group }}{% endif %}
+
+{% endfor %}
+);
+{% for t in terminators %}
+
+    //=========================================================================
+    // {{ t.instance }} ({{ t.module }}) — terminator
+    //   An inner bus port with nothing attached on this boundary. A constant
+    //   tie cannot express a bus response, so this helper answers instead.
+    //=========================================================================
+{% if t.desc %}
+    // {{ t.desc }}
+{% endif %}
+{% for w in t.wires %}
+    wire {{ '%-8s'|format(w.width_str) }} {{ w.name }};
+{% endfor %}
+
+    {{ t.module }}{% if t.params %} #(
+{% for p in t.params %}
+        .{{ '%-14s'|format(p.name) }} ({{ p.value }}){{ "" if loop.last else "," }}
+{% endfor %}
+    ){% endif %} {{ t.instance }} (
+{% for c in t.conns %}
+        .{{ '%-20s'|format(c.port) }} ({{ c.expr }}){{ "" if loop.last else "," }}
+{% endfor %}
+    );
+{% endfor %}
+
+    //=========================================================================
+    // {{ inner_module }} — inner SoC top
+    //   bonded -> chip pad net ; tied -> constant ; open -> unconnected
+    //   terminated -> wire to a terminator instance above
+    //=========================================================================
+    {{ inner_module }} u_soc (
+{% for c in connections %}
+{% if c.kind == 'open' %}
+        .{{ '%-20s'|format(c.port) }} (){{ "" if loop.last else "," }}  // open
+{% elif c.kind == 'tied' %}
+        .{{ '%-20s'|format(c.port) }} ({{ c.expr }}){{ "" if loop.last else "," }}  // tied
+{% elif c.kind == 'terminated' %}
+        .{{ '%-20s'|format(c.port) }} ({{ c.expr }}){{ "" if loop.last else "," }}  // terminated
+{% else %}
+        .{{ '%-20s'|format(c.port) }} ({{ c.expr }}){{ "" if loop.last else "," }}
+{% endif %}
+{% endfor %}
+    );
+
+endmodule

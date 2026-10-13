@@ -1,0 +1,287 @@
+//-----------------------------------------------------------------------------
+// {{ module_name }} Pad-level Wrapper
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Template:  soc_chip_pads.v.j2
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+
+module {{ module_name }} (
+`ifdef POWER_PINS
+  inout  wire          VDDIO,
+  inout  wire          VSSIO,
+  inout  wire          VDD,
+  inout  wire          VSS,
+  inout  wire          VDDACC,
+`endif
+  input  wire          SE,
+  inout  wire          CLK, // input
+  inout  wire          TEST, // output
+  inout  wire          NRST,  // active low reset
+{% for port in gpio_ports %}
+  inout  wire  [{{ port.width - 1 }}:0]  {{ port.name }},
+{% endfor %}
+{% for port in dap_ports %}
+  {{ '%-6s'|format(port.direction) }} wire          {{ port.name }},  // CoreSight SWJ-DAP -- plain port passthrough (no pad cell)
+{% endfor %}
+{% for grp in passthrough_groups %}
+{% for port in grp.ports %}
+  {{ '%-6s'|format(port.direction) }} wire  {{ '%-7s'|format(port.range) }} {{ port.name }},  // {{ grp.label }} -- plain port passthrough (no pad cell)
+{% endfor %}
+{% endfor %}
+  inout  wire          SWDIO,
+  inout  wire          SWDCK);
+
+
+//------------------------------------
+// internal wires
+
+localparam GPIO_TIO = 4;
+
+wire        pad_clk_i;
+wire        pad_nrst_i;
+wire        pad_test_i;
+wire        pad_swdclk_i;
+wire        pad_swdio_i;
+wire        pad_swdio_o;
+wire        pad_swdio_e;
+wire        pad_swdio_z;
+{% for port in gpio_ports %}
+wire [{{ port.width - 1 }}:0] pad_gpio_port{{ loop.index0 }}_i ;
+wire [{{ port.width - 1 }}:0] pad_gpio_port{{ loop.index0 }}_o ;
+wire [{{ port.width - 1 }}:0] pad_gpio_port{{ loop.index0 }}_e ;
+wire [{{ port.width - 1 }}:0] pad_gpio_port{{ loop.index0 }}_z ;
+{% endfor %}
+wire        soc_nreset;
+wire        soc_diag_mode;
+wire        soc_diag_ctrl;
+wire        soc_scan_mode;
+wire        soc_scan_enable;
+wire [GPIO_TIO-1:0] soc_scan_in; //soc test status outputs
+wire [GPIO_TIO-1:0] soc_scan_out; //soc test status outputs
+wire        soc_bist_mode;
+wire        soc_bist_enable;
+wire [GPIO_TIO-1:0] soc_bist_in; //soc test status outputs
+wire [GPIO_TIO-1:0] soc_bist_out; //soc test status outputs
+wire        soc_alt_mode; // ALT MODE = UART
+wire        soc_uart_rxd_i; // UART RXD
+wire        soc_uart_txd_o = 1'b1; // UART TXD
+wire        soc_swd_mode; // SWD mode
+wire        soc_swd_clk_i; // SWDCLK
+wire        soc_swd_dio_i; // SWDIO tristate input
+wire        soc_swd_dio_o; // SWDIO trstate output
+wire        soc_swd_dio_e; // SWDIO tristate output enable
+wire        soc_swd_dio_z; // SWDIO tristate output hiz
+{% for port in gpio_ports %}
+wire [{{ port.width - 1 }}:0] soc_gpio_port{{ loop.index0 }}_i; // GPIO SOC tristate input
+wire [{{ port.width - 1 }}:0] soc_gpio_port{{ loop.index0 }}_o; // GPIO SOC trstate output
+wire [{{ port.width - 1 }}:0] soc_gpio_port{{ loop.index0 }}_e; // GPIO SOC tristate output enable
+wire [{{ port.width - 1 }}:0] soc_gpio_port{{ loop.index0 }}_z; // GPIO SOC tristate output hiz
+{% endfor %}
+
+wire pad_se_i;
+
+{% for port in gpio_ports %}
+// connect up high order GPIOs for port {{ loop.index0 }}
+assign soc_gpio_port{{ loop.index0 }}_i[{{ port.width - 1 }}:GPIO_TIO] = pad_gpio_port{{ loop.index0 }}_i[{{ port.width - 1 }}:GPIO_TIO];
+assign pad_gpio_port{{ loop.index0 }}_o[{{ port.width - 1 }}:GPIO_TIO] = soc_gpio_port{{ loop.index0 }}_o[{{ port.width - 1 }}:GPIO_TIO];
+assign pad_gpio_port{{ loop.index0 }}_e[{{ port.width - 1 }}:GPIO_TIO] = soc_gpio_port{{ loop.index0 }}_e[{{ port.width - 1 }}:GPIO_TIO];
+assign pad_gpio_port{{ loop.index0 }}_z[{{ port.width - 1 }}:GPIO_TIO] = soc_gpio_port{{ loop.index0 }}_z[{{ port.width - 1 }}:GPIO_TIO];
+{% endfor %}
+
+wire tiehi = 1'b1;
+wire tielo = 1'b0;
+
+nanosoc_chip_cfg #(
+    .GPIO_TIO (GPIO_TIO)
+  )
+  u_nanosoc_chip_cfg
+  (
+  // Primary Inputs
+   .pad_clk_i        (pad_clk_i         )
+  ,.pad_nrst_i       (pad_nrst_i        )
+  ,.pad_test_i       (pad_test_i        )
+  // Alternate/reconfigurable IP and associated bidirectional I/O
+  ,.pad_altin_i      (pad_se_i      )  // SWCLK/UARTRXD/SCAN-ENABLE
+  ,.pad_altio_i      (pad_swdio_i       )  // SWDIO/UARTTXD tristate input
+  ,.pad_altio_o      (pad_swdio_o       )  // SWDIO/UARTTXD trstate output
+  ,.pad_altio_e      (pad_swdio_e       )  // SWDIO/UARTTXD tristate output enable
+  ,.pad_altio_z      (pad_swdio_z       )  // SWDIO/UARTTXD tristate output hiz
+{% for port in gpio_ports %}
+  // Reconfigurable General Purpose bidirectional I/Os Port-{{ loop.index0 }}
+  ,.pad_gpio_port{{ loop.index0 }}_i (pad_gpio_port{{ loop.index0 }}_i[GPIO_TIO-1:0]) // GPIO PAD tristate input
+  ,.pad_gpio_port{{ loop.index0 }}_o (pad_gpio_port{{ loop.index0 }}_o[GPIO_TIO-1:0]) // GPIO PAD trstate output
+  ,.pad_gpio_port{{ loop.index0 }}_e (pad_gpio_port{{ loop.index0 }}_e[GPIO_TIO-1:0]) // GPIO PAD tristate output enable
+  ,.pad_gpio_port{{ loop.index0 }}_z (pad_gpio_port{{ loop.index0 }}_z[GPIO_TIO-1:0]) // GPIO PAD tristate output hiz
+{% endfor %}
+  //SOC
+  ,.soc_nreset       (soc_nreset        )
+  ,.soc_diag_mode    (soc_diag_mode     )
+  ,.soc_diag_ctrl    (soc_diag_ctrl     )
+  ,.soc_scan_mode    (soc_scan_mode     )
+  ,.soc_scan_enable  (soc_scan_enable   )
+  ,.soc_scan_in      (soc_scan_in       ) // soc test scan chain inputs
+  ,.soc_scan_out     (soc_scan_out      ) // soc test scan chain outputs
+  ,.soc_bist_mode    (soc_bist_mode     )
+  ,.soc_bist_enable  (soc_bist_enable   )
+  ,.soc_bist_in      (soc_bist_in       ) // soc bist control inputs
+  ,.soc_bist_out     (soc_bist_out      ) // soc test status outputs
+  ,.soc_alt_mode     (soc_alt_mode      )// ALT MODE = UART
+  ,.soc_uart_rxd_i   (soc_uart_rxd_i    ) // UART RXD
+  ,.soc_uart_txd_o   (soc_uart_txd_o    ) // UART TXD
+  ,.soc_swd_mode     (soc_swd_mode      ) // SWD mode
+  ,.soc_swd_clk_i    (soc_swd_clk_i     ) // SWDCLK
+  ,.soc_swd_dio_i    (soc_swd_dio_i     ) // SWDIO tristate input
+  ,.soc_swd_dio_o    (soc_swd_dio_o     ) // SWDIO trstate output
+  ,.soc_swd_dio_e    (soc_swd_dio_e     ) // SWDIO tristate output enable
+  ,.soc_swd_dio_z    (soc_swd_dio_z     ) // SWDIO tristate output hiz
+{% for port in gpio_ports %}
+  ,.soc_gpio_port{{ loop.index0 }}_i (soc_gpio_port{{ loop.index0 }}_i[GPIO_TIO-1:0]) // GPIO SOC tristate input
+  ,.soc_gpio_port{{ loop.index0 }}_o (soc_gpio_port{{ loop.index0 }}_o[GPIO_TIO-1:0]) // GPIO SOC trstate output
+  ,.soc_gpio_port{{ loop.index0 }}_e (soc_gpio_port{{ loop.index0 }}_e[GPIO_TIO-1:0]) // GPIO SOC tristate output enable
+  ,.soc_gpio_port{{ loop.index0 }}_z (soc_gpio_port{{ loop.index0 }}_z[GPIO_TIO-1:0]) // GPIO SOC tristate output hiz
+{% endfor %}
+);
+
+ // --------------------------------------------------------------------------------
+ // Cortex-M0 {{ chip_module_name }} Microcontroller
+ // --------------------------------------------------------------------------------
+
+  {{ chip_module_name }} u_{{ chip_module_name }} (
+`ifdef POWER_PINS
+  .VDD         (VDD),
+  .VSS         (VSS),
+  .VDDACC      (VDDACC),
+`endif
+  .diag_mode   (soc_diag_mode     ),
+  .diag_ctrl   (soc_diag_ctrl     ),
+  .scan_mode   (soc_scan_mode     ),
+  .scan_enable (soc_scan_enable   ),
+  .scan_in     (soc_scan_in       ), // soc test scan chain inputs
+  .scan_out    (soc_scan_out      ),       // soc test scan chain outputs
+  .bist_mode   (soc_bist_mode     ),
+  .bist_enable (soc_bist_enable   ),
+  .bist_in     (soc_bist_in       ), // soc bist control inputs
+  .bist_out    (soc_bist_out      ),       // soc test status outputs
+  .alt_mode    (soc_alt_mode      ),// ALT MODE = UART
+  .uart_rxd_i  (soc_uart_rxd_i    ), // UART RXD
+  .uart_txd_o  (soc_uart_txd_o    ), // UART TXD
+  .swd_mode    (soc_swd_mode      ),    // SWD mode
+  .clk_i       (pad_clk_i),
+  .test_i      (soc_scan_mode), //(test_i),
+  .nrst_i      (soc_nreset), //(nrst_i),
+{% for port in gpio_ports %}
+  .{{ port.name | lower }}_i        (soc_gpio_port{{ loop.index0 }}_i), // level-shifted input from pad
+  .{{ port.name | lower }}_o        (soc_gpio_port{{ loop.index0 }}_o), // output port drive
+  .{{ port.name | lower }}_e        (soc_gpio_port{{ loop.index0 }}_e), // active high output drive enable (pad tech dependent)
+  .{{ port.name | lower }}_z        (soc_gpio_port{{ loop.index0 }}_z), // active low output drive enable (pad tech dependent)
+{% endfor %}
+{% for port in dap_ports %}
+  .{{ port.name }}({{ port.name }}),  // CoreSight SWJ-DAP passthrough (no pad cell)
+{% endfor %}
+{% for grp in passthrough_groups %}
+{% for port in grp.ports %}
+  .{{ port.name }}({{ port.name }}),  // {{ grp.label }} passthrough (no pad cell)
+{% endfor %}
+{% endfor %}
+  .swdio_i     (soc_swd_dio_i),
+  .swdio_o     (soc_swd_dio_o),
+  .swdio_e     (soc_swd_dio_e),
+  .swdio_z     (soc_swd_dio_z),
+  .swdclk_i    (pad_swdclk_i)
+  );
+
+
+ // --------------------------------------------------------------------------------
+ // IO pad (GLIB Generic Library mapping)
+ // --------------------------------------------------------------------------------
+
+`ifdef POWER_PINS
+// Pad IO power supplies
+
+PAD_VDDIO uPAD_VDDIO_1(
+   .PAD(VDDIO)
+   );
+
+PAD_VSSIO uPAD_VSSIO_1(
+   .PAD(VSSIO)
+   );
+
+// Core power supplies
+
+PAD_VDDSOC uPAD_VDD_1(
+   .PAD(VDD)
+   );
+
+PAD_VSS uPAD_VSS_1(
+   .PAD(VSS)
+   );
+
+// Accelerator Power supplies
+PAD_VDDSOC uPAD_VDDACC_1(
+   .PAD(VDDACC)
+   );
+`endif
+
+// Clock, Reset and Serial Wire Debug ports
+
+PAD_INOUT8MA_NOE uPAD_SE_I (
+   .PAD (SE),
+   .O   (tielo),
+   .I   (pad_se_i),
+   .NOE (tiehi)
+   );
+
+PAD_INOUT8MA_NOE uPAD_CLK_I (
+   .PAD (CLK),
+   .O   (tielo),
+   .I   (pad_clk_i),
+   .NOE (tiehi)
+   );
+
+PAD_INOUT8MA_NOE uPAD_XTAL_I (
+   .PAD (TEST),
+   .O   (tielo),
+   .I   (pad_test_i),
+   .NOE (tiehi)
+   );
+
+PAD_INOUT8MA_NOE uPAD_NRST_I (
+   .PAD (NRST),
+   .O   (tielo),
+   .I   (pad_nrst_i),
+   .NOE (tiehi)
+   );
+
+PAD_INOUT8MA_NOE uPAD_SWDIO_IO (
+   .PAD (SWDIO),
+   .O   (pad_swdio_o),
+   .I   (pad_swdio_i),
+   .NOE (pad_swdio_z)
+   );
+
+PAD_INOUT8MA_NOE uPAD_SWDCK_I (
+   .PAD (SWDCK),
+   .O   (tielo),
+   .I   (pad_swdclk_i),
+   .NOE (tiehi)
+   );
+
+{% for port in gpio_ports %}
+{% set port_idx = loop.index0 %}
+// GPIO Port {{ port_idx }} x {{ port.width }}
+
+{% for i in range(port.width) %}
+PAD_INOUT8MA_NOE uPAD_{{ port.name }}_{{ '%02d' | format(i) }} (
+   .PAD ({{ port.name }}[{{ '%02d' | format(i) }}]),
+   .O   (pad_gpio_port{{ port_idx }}_o[{{ '%02d' | format(i) }}]),
+   .I   (pad_gpio_port{{ port_idx }}_i[{{ '%02d' | format(i) }}]),
+   .NOE (pad_gpio_port{{ port_idx }}_z[{{ '%02d' | format(i) }}])
+   );
+
+{% endfor %}
+{% endfor %}
+endmodule

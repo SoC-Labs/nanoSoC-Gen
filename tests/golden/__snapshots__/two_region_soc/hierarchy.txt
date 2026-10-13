@@ -1,0 +1,8 @@
+============================================================
+  two_region_soc — Component Hierarchy
+============================================================
+
+  two_region_soc (top)
+  ├── u_sram_0 : tiny_region [addressable]
+  └── u_sram_1 : tiny_region [addressable]
+

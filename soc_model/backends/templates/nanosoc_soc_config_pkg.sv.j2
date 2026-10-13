@@ -1,0 +1,46 @@
+//-----------------------------------------------------------------------------
+// SoC Configuration Package
+//
+// Contributors
+//
+// David Mapstone (d.a.mapstone@soton.ac.uk)
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Source:    {{ source_yaml }}
+// Template:  nanosoc_soc_config_pkg.sv.j2
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+//
+// SystemVerilog package containing all SoC design parameters.
+// Replaces gen_defines.v as the single source of configuration truth.
+// Parameters that cannot be expressed as SV params (e.g. POWER_PINS,
+// CORTEX_M0) remain as compiler +define+ flags.
+//
+//-----------------------------------------------------------------------------
+
+package {{ package_name }};
+
+  // =========================================================================
+  // Design Configuration — from YAML system description
+  // =========================================================================
+{% for p in design_params %}
+{% if p.type == 'str' %}
+  localparam         {{ "%-28s" | format(p.name) }} = "{{ p.value }}";  // {{ p.desc }}
+{% else %}
+  localparam int     {{ "%-28s" | format(p.name) }} = {{ p.value }};  // {{ p.desc }}
+{% endif %}
+{% endfor %}
+
+{% if sim_params %}
+  // =========================================================================
+  // Simulation Configuration — testbench parameters
+  // =========================================================================
+{% for p in sim_params %}
+  localparam int     {{ "%-28s" | format(p.name) }} = {{ p.value }};  // {{ p.desc }}
+{% endfor %}
+{% endif %}
+
+endpackage

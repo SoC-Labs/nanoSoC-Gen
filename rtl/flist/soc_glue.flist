@@ -1,0 +1,16 @@
+//-----------------------------------------------------------------------------
+// SoC Glue Logic Helper Modules Filelist
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+
+// ============= Verilog library extensions ===========
++libext+.v+.vlib+.sv
+
+// =============    Structural Glue Logic Helpers    =============
+$(SOCLABS_NANOSOC_GEN_DIR)/rtl/soc_glue/soc_glue_passthrough.sv
+$(SOCLABS_NANOSOC_GEN_DIR)/rtl/soc_glue/soc_glue_or_reduce.sv
+$(SOCLABS_NANOSOC_GEN_DIR)/rtl/soc_glue/soc_glue_or_combine.sv
+$(SOCLABS_NANOSOC_GEN_DIR)/rtl/soc_glue/soc_glue_and_gate.sv
+$(SOCLABS_NANOSOC_GEN_DIR)/rtl/soc_glue/soc_glue_constant.sv

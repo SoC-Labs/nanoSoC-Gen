@@ -1,0 +1,6 @@
+component:
+  id: apb_peripheral
+  module: tiny_apb_periph
+  category: peripheral
+  label: "APB Peripheral"
+  desc: "A simple APB-attached peripheral."

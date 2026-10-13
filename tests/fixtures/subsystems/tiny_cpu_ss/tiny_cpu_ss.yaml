@@ -1,0 +1,115 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Hermetic fixture SUBSYSTEM module — the smallest gen:True structural
+# subsystem that SoCSubsystemBackend.generate_all() will emit SV for.
+#
+# Modelled on nanosoc_ss_cpu.yaml but minimal: it has its OWN gen:True
+# AHB-Lite interconnect plus an internal gen:False region, so the
+# generate_all _walk recursion (subsystem.py:477-487) finds it and the
+# subsystem backend renders <name>.sv for it.
+#
+# It exercises BOTH passthrough branches of the subsystem backend:
+#   * a passthrough TARGET ('system') routed to a module-level AHB master
+#     port (sub_m)  -> _is_passthrough_target / _build_interconnect target path
+#   * a passthrough INITIATOR ('sub_s') whose endpoint iface declares
+#     EXCLUDE: [hready] -> _init_passthrough_maps, _is_passthrough_initiator,
+#     the slave/target-boundary branch of _expand_ahb_port, and the
+#     target-boundary (hreadyout) branch of _build_interconnect.
+
+module:
+  name: tiny_cpu_ss
+  gen: True
+  desc: >
+    Minimal CPU-style subsystem. One internal SRAM target behind an internal
+    gen:True AHB-Lite busmatrix, plus a passthrough 'system' target routed to
+    a module-level master port and a passthrough 'sub_s' initiator (external
+    slave, EXCLUDE:[hready] slave-boundary form). Self-contained.
+
+  params:
+    SYS_ADDR_W:      { type: int, default: 32, desc: "System address width" }
+    SYS_DATA_W:      { type: int, default: 32, desc: "System data width" }
+    IMEM_RAM_ADDR_W: { type: int, default: 12, desc: "Local IMEM byte-address width (4 KB)" }
+
+  interfaces:
+    # Clock / reset inputs (driven by the parent).
+    - { name: sys_hclk,    type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB clock in" }
+    - { name: sys_hresetn, type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB reset in" }
+
+    # Passthrough TARGET endpoint: a module-level AHB master that the 'system'
+    # window forwards to. No hready in EXCLUDE -> initiator boundary form.
+    - { name: sub_m, type: ahb, direction: initiator, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W }, desc: "System-window passthrough master-out" }
+
+    # Passthrough INITIATOR endpoint #1: external slave port (debug/DMA) that
+    # drives the internal matrix. EXCLUDE:[hready] -> slave/target boundary
+    # (the cpu_ss form on nanosoc_ss_cpu).
+    - { name: sub_s, type: ahb, direction: target, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W, EXCLUDE: [hready] }, desc: "External slave passthrough initiator endpoint (slave-boundary form)" }
+
+    # Passthrough INITIATOR endpoint #2: an external master driving INTO the
+    # subsystem with NO hready in EXCLUDE -> cmsdk INITIATOR boundary form
+    # (the eth_ss_0/eth_ss_1 form: no hsel / no hreadyout; bare hready is a
+    # subsystem output). Exercises the initiator-boundary branch of
+    # _expand_ahb_port.
+    - { name: ext_m, type: ahb, direction: target, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W }, desc: "External master passthrough initiator endpoint (initiator-boundary form)" }
+
+  # Internal instances — a CPU-style master driving the matrix plus one local
+  # SRAM region behind the internal busmatrix.
+  instances:
+    # CPU-style RTL master: its AHB master port drives the matrix cpu_0
+    # initiator -> exercises the is_init branch of _expand_bus_connection.
+    - instance_name: u_cpu_0
+      rtl_module: tiny_cpu_core
+      addressable: False
+      params: {}
+      interfaces:
+        - { name: HCLK,    type: wire, direction: in, params: { WIDTH: 1 }, desc: "core clock" }
+        - { name: HRESETn, type: wire, direction: in, params: { WIDTH: 1 }, desc: "core reset" }
+        - { name: ahb_master, type: ahb, direction: initiator, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W }, desc: "CPU AHB master" }
+      connections:
+        - { port: HCLK,       conn: sys_hclk }
+        - { port: HRESETn,    conn: sys_hresetn }
+        - { port: ahb_master, conn: tiny_cpu_ss_ahb_interconnect.cpu_0 }
+
+    - instance_name: u_imem_0
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $IMEM_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: tiny_cpu_ss_ahb_interconnect.imem_0 }
+
+  # Internal busmatrix — 1 internal + 1 passthrough initiator x 1 internal +
+  # 1 passthrough target.
+  interconnects:
+    - name: tiny_cpu_ss_ahb_interconnect
+      gen: True
+      type: ahb_lite
+      desc: "CPU-subsystem internal busmatrix (passthrough system + external slave)"
+      params:
+        SYS_ADDR_W: $SYS_ADDR_W
+        SYS_DATA_W: $SYS_DATA_W
+      connections:
+        - { port: sys_hclk,    conn: sys_hclk }
+        - { port: sys_hresetn, conn: sys_hresetn }
+      targets:
+        - { name: imem_0, instance: u_imem_0, base: 0x10000000, size: 0x08000000, sw_access: rwx, region_type: memory, phys_size: 0x00001000, desc: "Local instruction memory" }
+        - { name: system, base: 0x20000000, size: 0xE0000000, sw_access: rw, region_type: ~, role: ~, passthrough: sub_m, desc: "System passthrough to module-level master port (sub_m)" }
+      initiators:
+        # Internal CPU-style initiator — drives the matrix conventionally.
+        - name: cpu_0
+          targets:
+            - name: imem_0
+            - name: system
+        # Passthrough initiator #1: external slave window feeding the matrix
+        # (slave-boundary form). Cannot see 'system' (prevents routing loops),
+        # matching cpu_ss.
+        - name: sub_s
+          passthrough: sub_s
+          targets:
+            - name: imem_0
+        # Passthrough initiator #2: external master feeding the matrix
+        # (initiator-boundary form, ext_m has no hready EXCLUDE).
+        - name: ext_m
+          passthrough: ext_m
+          targets:
+            - name: imem_0
+            - name: system

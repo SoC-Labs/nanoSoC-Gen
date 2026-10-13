@@ -1,0 +1,44 @@
+cmsdk_mux_ahb_interconnect — Address Maps
+=========================================
+
+Address Map for cpu_m (remap[0]=0)
+============================================================
+
+     Start        End     Size Target Type
+-------------------------------------------------
+  00000000   07ffffff  128.0MB rom_0  NORMAL
+  08000000   0fffffff  128.0MB rom_0  NORMAL
+  10000000   17ffffff  128.0MB ram_0  NORMAL (alias)
+  18000000   1fffffff  128.0MB dat_0  NORMAL
+  20000000   ffffffff 3584.0MB system NORMAL
+
+Address Map for cpu_m (remap[0]=1)
+============================================================
+
+     Start        End     Size Target Type
+-------------------------------------------------
+  00000000   07ffffff  128.0MB ram_0  REMAP
+  08000000   0fffffff  128.0MB rom_0  NORMAL
+  10000000   17ffffff  128.0MB ram_0  NORMAL (alias)
+  18000000   1fffffff  128.0MB dat_0  NORMAL
+  20000000   ffffffff 3584.0MB system NORMAL
+
+Address Map for ext_s (remap[0]=0)
+============================================================
+
+     Start        End     Size Target Type
+------------------------------------------------
+  00000000   07ffffff  128.0MB rom_0 NORMAL
+  08000000   0fffffff  128.0MB rom_0 NORMAL
+  10000000   17ffffff  128.0MB ram_0 NORMAL (alias)
+  18000000   1fffffff  128.0MB dat_0 NORMAL
+
+Address Map for ext_s (remap[0]=1)
+============================================================
+
+     Start        End     Size Target Type
+------------------------------------------------
+  00000000   07ffffff  128.0MB ram_0 REMAP
+  08000000   0fffffff  128.0MB rom_0 NORMAL
+  10000000   17ffffff  128.0MB ram_0 NORMAL (alias)
+  18000000   1fffffff  128.0MB dat_0 NORMAL

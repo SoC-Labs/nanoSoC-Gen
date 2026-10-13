@@ -1,0 +1,7 @@
+============================================================
+  minimal_soc — Component Hierarchy
+============================================================
+
+  minimal_soc (top)
+  └── u_sram_0 : tiny_region [addressable]
+

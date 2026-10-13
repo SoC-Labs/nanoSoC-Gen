@@ -1,0 +1,32 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Hermetic fixture register map — minimal, modelled on cmsdk_apb_timer.yaml.
+# Referenced by an interconnect target's register_map: field to exercise the
+# discovery / rdl backends with a real register-map attachment.
+
+register_map:
+  name: tiny_regs
+  module: tiny_apb_periph
+  description: >
+    Minimal register map: one control register with two fields and one
+    read-only status register. Self-contained fixture component.
+  address_width: 12
+  data_width: 32
+
+  registers:
+    - name: CTRL
+      offset: 0x000
+      width: 32
+      access: RW
+      reset_value: 0x00000000
+      description: Control register
+      fields:
+        - { name: ENABLE,  bits: "0", access: RW, reset_value: 0, description: "Enable bit" }
+        - { name: MODE,    bits: "2:1", access: RW, reset_value: 0, description: "Mode select" }
+    - name: STATUS
+      offset: 0x004
+      width: 32
+      access: RO
+      reset_value: 0x00000000
+      description: Status register
+      fields:
+        - { name: BUSY, bits: "0", access: RO, reset_value: 0, description: "Busy flag" }

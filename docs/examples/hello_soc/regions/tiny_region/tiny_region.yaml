@@ -1,0 +1,30 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+#
+# tiny_region — a gen:False leaf SRAM region with one AHB slave port.
+# Self-contained (no external dependencies). The interconnect in hello_soc.yaml
+# decodes one window to this region's ahb_slave.
+#
+# gen:False means nanosoc_gen does NOT emit RTL for it — you supply the leaf
+# RTL by hand (or it is a vendor/macro). The generator only emits the plumbing
+# (toplevel, interconnect, glue, config package, memmap).
+
+module:
+  name: tiny_region
+  gen: False
+  desc: >
+    Minimal general-purpose SRAM region with one AHB slave port.
+
+  params:
+    SYS_ADDR_W: { type: int, default: 32, desc: "System address width" }
+    SYS_DATA_W: { type: int, default: 32, desc: "System data width" }
+    RAM_ADDR_W: { type: int, default: 12, desc: "RAM byte-address width (phys = 2^N bytes)" }
+    RAM_DATA_W: { type: int, default: 32, desc: "RAM data width" }
+
+  interfaces:
+    - { name: HCLK,    type: wire, direction: in, params: { WIDTH: 1 }, desc: AHB clock }
+    - { name: HRESETn, type: wire, direction: in, params: { WIDTH: 1 }, desc: AHB reset (active low) }
+    # EXCLUDE drops the listed signals: this is the cmsdk AHB-Lite *slave* boundary form.
+    - { name: ahb_slave, type: ahb, direction: target, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W, EXCLUDE: [hburst, hmastlock] }, desc: AHB slave port }
+
+  srams:
+    - { name: u_sram, addr_width: $RAM_ADDR_W, data_width: $RAM_DATA_W, desc: "General-purpose SRAM" }

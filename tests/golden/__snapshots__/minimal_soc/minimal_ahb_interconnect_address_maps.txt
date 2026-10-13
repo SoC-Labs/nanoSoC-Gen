@@ -1,0 +1,9 @@
+minimal_ahb_interconnect — Address Maps
+=======================================
+
+Address Map for cpu_m (no remap bits)
+============================================================
+
+     Start        End     Size Target Type
+-------------------------------------------------
+  00000000   00000fff    4.0KB sram_0 NORMAL

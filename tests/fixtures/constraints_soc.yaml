@@ -1,0 +1,77 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Fixture SoC for the timing-constraints backend (SDC + XDC).
+#
+# Models the multicore clocking in miniature:
+#   * a free-running system clock (sys_fclk @ SYS_CLK_FREQ_HZ),
+#   * a pre-verified Ethernet RMII IP that carries its OWN constraints: block
+#     (50 MHz RMII ref clock, /2 MII generated clocks, async sys<->rmii group,
+#      RMII io-delays, MDIO false-path) — FPGA-scoped,
+#   * a pre-verified QSPI flash IP that carries a QSPI SCK generated clock +
+#     io-delays — FPGA-scoped.
+# Aggregating these IP constraints to the top is the pre-verified-IP story.
+#
+# The matching chip boundary (tests/fixtures/chip_boundary/constraints_chip.yaml)
+# classifies the boundary pads (clk / swd / hostio4) so the SDC pad-cell block
+# and boundary-classified io-delays / swd false-paths are exercised too.
+
+module:
+  name: constraints_soc
+  gen: True
+  desc: >
+    Timing-constraints fixture: system clock + two pre-verified IPs (eth RMII,
+    QSPI flash) each carrying a constraints: block that aggregates to the top.
+
+  params:
+    SYS_CLK_FREQ_HZ: { type: int, default: 100000000, desc: "System clock (100 MHz)" }
+    SYS_ADDR_W:      { type: int, default: 32 }
+    SYS_DATA_W:      { type: int, default: 32 }
+
+  clocks:
+    - { name: sys_fclk, source: external, desc: "Free-running system clock" }
+
+  resets:
+    - { name: sys_sysresetn, active: low, source: external, desc: "External reset" }
+
+  interfaces:
+    - { name: sys_fclk,      type: wire, direction: in, params: { WIDTH: 1 }, desc: "System clock in" }
+    - { name: sys_sysresetn, type: wire, direction: in, params: { WIDTH: 1 }, desc: "Reset in" }
+    - { name: rmii_ref_clk,  type: wire, direction: in, params: { WIDTH: 1 }, desc: "50 MHz RMII reference clock" }
+    - { name: dap_swclktck,  type: wire, direction: in, params: { WIDTH: 1 }, desc: "SWCLK" }
+    - { name: cpu_m, type: ahb, direction: initiator, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W }, desc: "CPU AHB master-out" }
+
+  instances:
+    - instance_name: u_eth_ss_0
+      module: eth_rmii_ip
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W }
+      connections:
+        - { port: HCLK,         conn: sys_fclk }
+        - { port: HRESETn,      conn: sys_sysresetn }
+        - { port: rmii_ref_clk, conn: rmii_ref_clk }
+        - { port: ahb_slave,    conn: constraints_ahb_interconnect.eth }
+
+    - instance_name: u_qspi_flash_0
+      module: qspi_flash_ip
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W }
+      connections:
+        - { port: HCLK,      conn: sys_fclk }
+        - { port: HRESETn,   conn: sys_sysresetn }
+        - { port: ahb_slave, conn: constraints_ahb_interconnect.qspi }
+
+  interconnects:
+    - name: constraints_ahb_interconnect
+      gen: True
+      type: ahb_lite
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W }
+      connections:
+        - { port: sys_hclk,    conn: sys_fclk }
+        - { port: sys_hresetn, conn: sys_sysresetn }
+      targets:
+        - { name: eth,  instance: u_eth_ss_0,     base: 0x40000000, size: 0x00010000, sw_access: rw, region_type: peripheral, desc: "Ethernet RMII" }
+        - { name: qspi, instance: u_qspi_flash_0, base: 0x50000000, size: 0x00010000, sw_access: rw, region_type: peripheral, desc: "QSPI flash" }
+      initiators:
+        - name: cpu_m
+          targets:
+            - name: eth
+            - name: qspi

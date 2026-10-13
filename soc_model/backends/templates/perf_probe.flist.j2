@@ -1,0 +1,25 @@
+//-----------------------------------------------------------------------------
+// Performance-Probe Harness Filelist
+//
+// Contributors
+//
+// David Mapstone (d.a.mapstone@soton.ac.uk)
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Source:    {{ source_yaml }}
+// Template:  {{ template_name }}
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+
+// ============= Verilog library extensions ===========
++libext+.v+.vlib+.sv
+
+// =============    perf_probe primitives (project RTL)    =============
+{{ probe_rtl_ref }}/ahb_perf_probe.v
+{{ probe_rtl_ref }}/ahb_perf_probe_regs.v
+
+// =============    Generated perf-probe harness    =============
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}/{{ module_name }}.sv

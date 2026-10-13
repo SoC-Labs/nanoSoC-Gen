@@ -1,0 +1,91 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Fixture SoC whose top instantiates a gen:True structural SUBSYSTEM
+# (tiny_cpu_ss) that itself owns a gen:True interconnect + internal region.
+# This is the ONLY fixture that drives SoCSubsystemBackend.generate_all():
+# the _walk recursion (subsystem.py:477-487) finds tiny_cpu_ss (gen:True with
+# its own interconnect) and renders tiny_cpu_ss.sv via the subsystem backend.
+#
+# The subsystem exercises both passthrough branches:
+#   * passthrough TARGET 'system' -> module master port sub_m
+#   * passthrough INITIATOR 'sub_s' (EXCLUDE:[hready] slave boundary)
+#
+# The top wiring below only needs to BUILD (resolved_module attached); the
+# subsystem backend renders the *subsystem*, so the top's own rendering is
+# not what is under test here.
+
+module:
+  name: nested_subsystem_soc
+  gen: True
+  desc: >
+    SoC fixture with a nested gen:True CPU-style subsystem. The top has one
+    SRAM target and one tiny_cpu_ss instance whose master/slave passthrough
+    ports join the top busmatrix. Drives the subsystem SV backend.
+
+  params:
+    SYS_CLK_FREQ_HZ: { type: int, default: 50000000, desc: "System clock (50 MHz)" }
+    SYS_ADDR_W:      { type: int, default: 32, desc: "System address width" }
+    SYS_DATA_W:      { type: int, default: 32, desc: "System data width" }
+    SRAM_RAM_ADDR_W: { type: int, default: 12, desc: "Top SRAM byte-address width (4 KB)" }
+
+  clocks:
+    - { name: sys_hclk, source: external, desc: "AHB clock" }
+
+  resets:
+    - { name: sys_hresetn, active: low, source: external, desc: "AHB reset" }
+
+  interfaces:
+    - { name: sys_hclk,    type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB clock in" }
+    - { name: sys_hresetn, type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB reset in" }
+    # External slave window into the top matrix (drives the matrix, e.g. DMA).
+    - { name: dap_s, type: ahb, direction: target, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W }, desc: "Top external slave master-in" }
+
+  instances:
+    # Shared top SRAM target.
+    - instance_name: u_sram_0
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $SRAM_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: nested_subsystem_ahb_interconnect.sram_0 }
+
+    # The nested gen:True subsystem. Its master (sub_m) joins the matrix as an
+    # initiator; its slave (sub_s) is exposed as a top target window.
+    - instance_name: u_cpu_ss_0
+      module: tiny_cpu_ss
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, IMEM_RAM_ADDR_W: $SRAM_RAM_ADDR_W }
+      connections:
+        - { port: sys_hclk,    conn: sys_hclk }
+        - { port: sys_hresetn, conn: sys_hresetn }
+        - { port: sub_m,       conn: nested_subsystem_ahb_interconnect.cpu_ss_0_m }
+        - { port: sub_s,       conn: nested_subsystem_ahb_interconnect.cpu_ss_0_slave }
+
+  interconnects:
+    - name: nested_subsystem_ahb_interconnect
+      gen: True
+      type: ahb_lite
+      desc: "Top AHB-Lite interconnect joining the SRAM, the subsystem master and the subsystem slave window"
+      params:
+        SYS_ADDR_W: $SYS_ADDR_W
+        SYS_DATA_W: $SYS_DATA_W
+      connections:
+        - { port: sys_hclk,    conn: sys_hclk }
+        - { port: sys_hresetn, conn: sys_hresetn }
+      targets:
+        - { name: sram_0,        instance: u_sram_0, base: 0x00000000, size: 0x00001000, sw_access: rwx, region_type: memory, phys_size: 0x00001000, desc: "Top SRAM" }
+        - { name: cpu_ss_0_slave, base: 0x80000000, size: 0x20000000, sw_access: rwx, region_type: ~, role: ~, desc: "CPU subsystem slave aperture (debug/DMA into tiny_cpu_ss)" }
+      initiators:
+        # External DAP/DMA master driving the matrix.
+        # dap_m is the external master port dap_s (without `passthrough:` the
+        # dap_s port was connected to nothing and dap_m was undriven).
+        - name: dap_m
+          passthrough: dap_s
+          targets:
+            - name: sram_0
+            - name: cpu_ss_0_slave
+        # The subsystem's outward system-passthrough master.
+        - name: cpu_ss_0_m
+          targets:
+            - name: sram_0

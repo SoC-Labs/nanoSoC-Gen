@@ -1,0 +1,40 @@
+#-----------------------------------------------------------------------------
+# AHB-Lite Master (Initiator) Interface Definition
+# Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+# SPDX-License-Identifier: Apache-2.0
+#-----------------------------------------------------------------------------
+# Standard AHB-Lite master interface. Used by CPU, debug, and DMA initiators.
+# Directly maps to ARM AMBA 2.0 AHB-Lite master port signals.
+#
+# Parameters:
+#   ADDR_W — address width (default 32)
+#   DATA_W — data width (default 32)
+#
+# Usage in a component ports list:
+#   - interface: !include ../interfaces/ahb_master.yaml
+#     name: cpu_0                # prefix applied to all signals
+#     parameters: { ADDR_W: 32, DATA_W: 32 }
+#-----------------------------------------------------------------------------
+
+interface:
+  name: ahb_master
+  description: AHB-Lite master (initiator) port
+  protocol: ahb_lite
+  role: master
+
+  parameters:
+    ADDR_W: { type: int, default: 32, description: Address width }
+    DATA_W: { type: int, default: 32, description: Data width }
+
+  signals:
+    - { name: haddr,     direction: out, width: ${ADDR_W}, description: AHB address }
+    - { name: htrans,    direction: out, width: 2,         description: AHB transfer type }
+    - { name: hwrite,    direction: out, width: 1,         description: AHB write }
+    - { name: hsize,     direction: out, width: 3,         description: AHB size }
+    - { name: hburst,    direction: out, width: 3,         description: AHB burst type }
+    - { name: hprot,     direction: out, width: 4,         description: AHB protection }
+    - { name: hwdata,    direction: out, width: ${DATA_W}, description: AHB write data }
+    - { name: hmastlock, direction: out, width: 1,         description: AHB master lock }
+    - { name: hrdata,    direction: in,  width: ${DATA_W}, description: AHB read data }
+    - { name: hready,    direction: in,  width: 1,         description: AHB ready }
+    - { name: hresp,     direction: in,  width: 1,         description: AHB response }

@@ -1,0 +1,89 @@
+# nanosoc_gen CI — pytest unit + golden suite
+#
+# Implements roadmap doc 01 (docs/roadmap/01-unit-testing-nanosoc-gen.md, M6)
+# as the generator repo's OWN pipeline: every push / merge request to
+# nanosoc_gen runs the suite as a fast, pure-Python gate. There are no EDA
+# tools and no submodules involved.
+#
+# Executor: assumes a SHELL executor with `python3` on PATH — the SOCLabs
+# convention (tools live on the runner host, so no `image:`; cf. the
+# nanosoc-multicore-system superproject pipeline, which is also image-less).
+# To run this on a DOCKER executor instead, uncomment the `image:` line below;
+# nothing else needs to change.
+#
+# image: python:3.11
+#
+# Copyright 2026, SoC Labs (www.soclabs.org)
+
+stages:
+  - test
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+  # No nested submodules are needed for the suite.
+  GIT_SUBMODULE_STRATEGY: none
+
+cache:
+  key: "pip-${CI_COMMIT_REF_SLUG}"
+  paths:
+    - .pip-cache/
+
+# Shared install step. `-e .[test]` pulls the generator's runtime deps
+# (jinja2, pyyaml, systemrdl-compiler, peakrdl-regblock) plus the test extra
+# (pytest, pytest-cov) from pyproject.toml — single source of truth, no drift.
+.pytest_setup: &pytest_setup
+  before_script:
+    - python3 --version
+    - python3 -m pip install --user -e ".[test]"
+    - export PATH="$HOME/.local/bin:$PATH"
+
+# ---------------------------------------------------------------------------
+# Default tier (the gate): unit + golden. Pure Python, sub-minute, no EDA
+# tools. Fails the pipeline on any test failure or if coverage drops below
+# the floor. Publishes JUnit results and a Cobertura coverage report, and
+# exposes the total % as the job's coverage badge.
+# ---------------------------------------------------------------------------
+pytest:
+  stage: test
+  <<: *pytest_setup
+  script:
+    - python3 -m pytest -p no:cacheprovider -m "unit or golden"
+      --junitxml=report.xml
+      --cov=soc_model --cov-report=term-missing --cov-report=xml:coverage.xml
+      --cov-fail-under=90
+  coverage: '/^TOTAL\s+\d+\s+\d+\s+(\d+)%/'
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - report.xml
+      - coverage.xml
+    expire_in: 30 days
+
+# ---------------------------------------------------------------------------
+# Opt-in tooling tier: exercises the systemrdl-compiler + peakrdl-regblock
+# RTL-emission path. The perl/BuildBusMatrix tests skip cleanly (no ARM IP on
+# a generic runner; -rs reports the skip reasons). Informational — runs but
+# never blocks the pipeline. The `slow` tier is intentionally not run here:
+# it needs the real multicore SoC tree (NANOSOC_REAL_ROOT), which a standalone
+# generator checkout does not have, so it would only skip.
+# ---------------------------------------------------------------------------
+pytest-tooling:
+  stage: test
+  <<: *pytest_setup
+  script:
+    - python3 -m pytest -p no:cacheprovider -m tooling -rs --junitxml=report-tooling.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report-tooling.xml
+    paths:
+      - report-tooling.xml
+    expire_in: 30 days
+  allow_failure: true

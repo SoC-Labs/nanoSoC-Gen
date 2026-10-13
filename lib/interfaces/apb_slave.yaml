@@ -1,0 +1,37 @@
+#-----------------------------------------------------------------------------
+# APB Slave Interface Definition
+# Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+# SPDX-License-Identifier: Apache-2.0
+#-----------------------------------------------------------------------------
+# Standard APB slave interface (AMBA 2.0 / 3.0 APB).
+# Used by peripherals connected via AHB-to-APB bridge and APB slave mux.
+#
+# Parameters:
+#   ADDR_W — APB address width (default 12, i.e. 4 KB per peripheral)
+#   DATA_W — APB data width (default 32)
+#
+# Usage in a component ports list:
+#   - interface: !include ../interfaces/apb_slave.yaml
+#     name: debug                 # prefix applied to all signals
+#     parameters: { ADDR_W: 10, DATA_W: 32 }
+#-----------------------------------------------------------------------------
+
+interface:
+  name: apb_slave
+  description: APB slave (peripheral) port
+  protocol: apb
+  role: slave
+
+  parameters:
+    ADDR_W: { type: int, default: 12, description: APB address width }
+    DATA_W: { type: int, default: 32, description: APB data width }
+
+  signals:
+    - { name: psel,    direction: in,  width: 1,         description: APB peripheral select }
+    - { name: paddr,   direction: in,  width: ${ADDR_W}, description: APB address }
+    - { name: penable, direction: in,  width: 1,         description: APB enable }
+    - { name: pwrite,  direction: in,  width: 1,         description: APB write }
+    - { name: pwdata,  direction: in,  width: ${DATA_W}, description: APB write data }
+    - { name: prdata,  direction: out, width: ${DATA_W}, description: APB read data }
+    - { name: pready,  direction: out, width: 1,         description: APB ready }
+    - { name: pslverr, direction: out, width: 1,         description: APB slave error }

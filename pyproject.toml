@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nanosoc-gen"
+version = "0.1.0"
+description = "SoC generation tool — parse YAML system descriptions and generate RTL, firmware config, and documentation"
+requires-python = ">=3.6"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "SoC Labs", email = "info@soclabs.org"},
+]
+dependencies = [
+    "jinja2",
+    "pyyaml",
+    "systemrdl-compiler>=1.29",
+    "peakrdl-regblock>=1.2",
+    "dataclasses; python_version < '3.7'",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7", "pytest-cov"]
+# The SoC Configurator web app (soc_model/configurator). The headless
+# `check` command and the gui_service layer need none of these.
+configurator = ["fastapi>=0.100", "uvicorn>=0.20"]
+# MCP server (soc_model/mcp_server); needs python >= 3.10.
+mcp = ["mcp>=2.3"]
+
+[project.scripts]
+soc-model = "soc_model.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["soc_model*"]
+
+[tool.setuptools.package-data]
+soc_model = [
+  "configurator/templates/**/*.html",
+  "configurator/static/**/*",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "unit: fast pure-Python tests (no EDA tools)",
+  "golden: snapshot tests of generated artifacts",
+  "tooling: tests requiring perl/BuildBusMatrix or peakrdl-regblock",
+  "slow: tests driving the real multicore SoC YAML / submodules",
+]
+# Default run = unit + golden; tooling and slow are opt-in.
+addopts = "-m 'not tooling and not slow'"

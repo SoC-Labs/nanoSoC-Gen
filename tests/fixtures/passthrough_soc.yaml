@@ -1,0 +1,74 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Fixture SoC exercising the passthrough boundary heuristic:
+#   * a passthrough TARGET ('system') routed to a module-level AHB master
+#     interface (no instance) — the tie-off / passthrough-target path,
+#   * a passthrough INITIATOR whose endpoint iface declares EXCLUDE: [hready]
+#     so it takes the AHB-Lite *slave/target* boundary (the EXCLUDE branch of
+#     passthrough_initiator_uses_initiator_boundary).
+
+module:
+  name: passthrough_soc
+  gen: True
+  desc: >
+    Passthrough SoC fixture. One SRAM target plus a passthrough 'system'
+    target to a module-level AHB master, and an external-slave passthrough
+    initiator whose iface excludes hready (slave-boundary form).
+
+  params:
+    SYS_CLK_FREQ_HZ: { type: int, default: 50000000, desc: "System clock (50 MHz)" }
+    SYS_ADDR_W:      { type: int, default: 32, desc: "System address width" }
+    SYS_DATA_W:      { type: int, default: 32, desc: "System data width" }
+    SRAM_RAM_ADDR_W: { type: int, default: 12, desc: "SRAM byte-address width (4 KB)" }
+
+  clocks:
+    - { name: sys_hclk, source: external, desc: "AHB clock" }
+
+  resets:
+    - { name: sys_hresetn, active: low, source: external, desc: "AHB reset" }
+
+  interfaces:
+    - { name: sys_hclk,    type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB clock in" }
+    - { name: sys_hresetn, type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB reset in" }
+    # Passthrough TARGET endpoint: a module-level AHB master that the 'system'
+    # window forwards to (initiator boundary — no hready in EXCLUDE).
+    - { name: sys_m, type: ahb, direction: initiator, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W }, desc: "System-window passthrough master-out" }
+    # Passthrough INITIATOR endpoint: external slave port that drives the
+    # matrix. EXCLUDE: [hready] selects the slave/target boundary form.
+    - { name: ext_s, type: ahb, direction: target, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W, EXCLUDE: [hready] }, desc: "External slave passthrough initiator endpoint" }
+
+  instances:
+    - instance_name: u_sram_0
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $SRAM_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: passthrough_ahb_interconnect.sram_0 }
+
+  interconnects:
+    - name: passthrough_ahb_interconnect
+      gen: True
+      type: ahb_lite
+      desc: "AHB-Lite interconnect with a passthrough target and passthrough initiator"
+      params:
+        SYS_ADDR_W: $SYS_ADDR_W
+        SYS_DATA_W: $SYS_DATA_W
+      connections:
+        - { port: sys_hclk,    conn: sys_hclk }
+        - { port: sys_hresetn, conn: sys_hresetn }
+      targets:
+        - { name: sram_0, instance: u_sram_0, base: 0x00000000, size: 0x00001000, sw_access: rwx, region_type: memory, phys_size: 0x00001000, desc: "On-chip SRAM" }
+        - { name: system, base: 0x20000000, size: 0x10000000, sw_access: rw, region_type: ~, role: ~, passthrough: sys_m, desc: "System passthrough to module-level master port (sys_m)" }
+      initiators:
+        # Internal CPU-style initiator (drives the matrix conventionally).
+        - name: cpu_m
+          targets:
+            - name: sram_0
+            - name: system
+        # Passthrough initiator: an external slave window feeding the matrix.
+        - name: ext_s
+          passthrough: ext_s
+          targets:
+            - name: sram_0
+            - name: system

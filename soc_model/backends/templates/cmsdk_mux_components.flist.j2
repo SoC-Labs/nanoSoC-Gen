@@ -1,0 +1,21 @@
+//-----------------------------------------------------------------------------
+// Arm Cortex-M0 Quickstart components for impl: cmsdk_mux interconnects
+// Written by SoC Labs. Referenced by path through $(ARM_CORSTONE_101_DIR);
+// nothing is copied. Include this ONCE per SoC: each module must be compiled
+// exactly once. If your flow already lists some of them (e.g. a corstone101
+// filelist carrying cmsdk_ahb_slave_mux / cmsdk_ahb_default_slave), list only
+// the rest instead.
+//
+// Copyright (C) 2026, SoC Labs (www.soclabs.org)
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Source:    {{ source_yaml }}
+// Template:  {{ template_name }}
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+// Used by: {% for ic in interconnects %}{{ ic }}_lite{{ ', ' if not loop.last else '' }}{% endfor %}
+
+
+{% for c in cmsdk_components %}
+$(ARM_CORSTONE_101_DIR)/{{ c }}
+{% endfor %}

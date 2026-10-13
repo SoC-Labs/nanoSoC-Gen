@@ -1,0 +1,40 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+#
+# Hermetic FPGA-profile fixture for SoCFpgaWrapperBackend tests.
+#
+# Pairs with tests/fixtures/chip_boundary/multicore_chip.yaml (the miniature
+# boundary).  Exercises every bespoke knob in miniature: a param override, a
+# board pin rename (clk_i -> sys_clk), an excluded pad (io bidir bus, with an
+# exclude_tie on its inner input), a soc_out debug tap (status_o re-exported),
+# a wire re-export tap, and one feature (rtc-style source drive).
+
+fpga_profile:
+  module_name: multicore_fpga_wrapper
+  tristate_convention: vivado
+
+  param_overrides:
+    - { name: MEM_ADDR_W, default: "14", comment: "FPGA fit (64 KB)" }
+
+  port_renames:
+    clk_i: sys_clk          # board clock rename
+    swdi:  swd_dio          # bidir base rename: swd_dio_i / _o / _t
+
+  exclude_pads:
+    - io                    # 4-bit bidir bus dropped on the board
+
+  # exclude_ties keys an EXCLUDED pad's inner input; the io bus is bidir so it
+  # has no plain input — instead drive the boundary tie `nmi` via a feature
+  # below (tests feature-overrides-tie).
+
+  debug_taps:
+    - { name: status_o,     from: status_o, kind: soc_out,  comment: "status re-export" }
+    - { name: txd_o_dbg,    from: txd_o,    kind: wire,     comment: "txd activity tap" }
+
+  features:
+    nmi_from_strap:
+      enabled: true
+      drives: nmi           # overrides the boundary tie nmi=1'b0
+      source: "1'b1"
+
+  ip_xact:
+    physical_names: [sys_clk, txd_o]

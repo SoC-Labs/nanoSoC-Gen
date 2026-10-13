@@ -1,0 +1,12 @@
+// Auto-generated ADP address defines
+// Source:    {{ source_yaml }}
+// Generated: {{ generated_date }}
+//
+// DO NOT EDIT — regenerate with gen_firmware_config.py
+
+`define ADP_UPLOAD_ADDRESS 32'h{{ adp_address_hex }}
+
+// ADP address nibble characters (for adpbuf byte construction):
+{% for i, ch in adp_nibbles %}
+// adpbuf[{{ i + 3 }}] = "{{ ch }}";    // nibble {{ i }}
+{% endfor %}

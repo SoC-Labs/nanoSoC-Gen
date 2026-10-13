@@ -1,0 +1,19 @@
+================================================================================
+  apb_bridge_soc — Memory Map
+================================================================================
+
+Interconnect: apb_bridge_ahb_interconnect (ahb_lite)
+--------------------------------------------------------------------------------
+  Target               Instance                       Base           End        Size  Access Type    
+  ──────────────────── ────────────────────── ────────────  ────────────  ──────────  ───── ────────
+  sram_0               u_sram_0               0x00000000  0x00000FFF        4 KB  rwx   memory  
+  apb_periph_0         u_apb_periph_0         0x40000000  0x40000FFF        4 KB  rw    periph  
+    └─ regs_0           tiny_apb_periph        0x40000000  0x40000FFF        4 KB                  [tiny_regs]
+        0x40000000  CTRL                 RW   Control register
+        0x40000004  STATUS               RO   Status register
+
+  Initiator Connectivity:
+  ────────────────────────────────────────────────────────────────────────────
+    cpu_m: sram_0, apb_periph_0
+
+================================================================================

@@ -1,0 +1,72 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+#
+# Hermetic chip-boundary fixture for SoCChipWrapperBackend tests.
+#
+# Faithfully mirrors the multicore boundary in miniature: a couple of single
+# in/out, one bus in + one bus out, the tristate pair (active-low oe), all four
+# bidir-triplet shapes (scalar + bus), two tied inputs (incl. a param-width
+# one), two open outputs, and one TERMINATED AHB manager port.  Mixed flat-list
+# `pads:` form (the bundled spec uses the grouped-mapping form; both must build).
+#
+# It must classify EVERY port of tests/fixtures/multicore_soc.yaml exactly once:
+# the chip/fpga wrapper backends now refuse to emit a wrapper that would
+# silently drop a port from the inner-SoC instantiation.
+
+chip_boundary:
+  chip_module:  multicore_chip
+  inner_module: multicore_soc
+
+  pads:
+    # single input / output
+    - { chip_port: clk,      pad_kind: input,  width: 1, in:  clk_i }
+    - { chip_port: txd,      pad_kind: output, width: 1, out: txd_o }
+    # bus clock + reset — bonded so the terminator below can reference them
+    - { chip_port: hclk,     pad_kind: input,  width: 1, in:  sys_hclk }
+    - { chip_port: hresetn,  pad_kind: input,  width: 1, in:  sys_hresetn }
+    # bus input / output
+    - { chip_port: rxbus,    pad_kind: input,  width: 2, in:  rxbus_i }
+    - { chip_port: txbus,    pad_kind: output, width: 2, out: txbus_o }
+    # tristate output (active-low oe)
+    - { chip_port: tdo, pad_kind: tristate_out, width: 1, out: tdo_o, oe: ntdoen_o, oe_polarity: active_low }
+    # bidir scalar (active-high oe)
+    - { chip_port: swdio, pad_kind: bidir, width: 1, in: swdi, out: swdo, oe: swdoen, oe_polarity: active_high }
+    # bidir bus (active-high oe)
+    - { chip_port: io, pad_kind: bidir, width: 4, in: io_i, out: io_o, oe: io_e, oe_polarity: active_high }
+
+  ties:
+    - { soc_port: nmi,        const: "1'b0" }
+    - { soc_port: slave_haddr, const: "{ADDR_W{1'b0}}" }
+
+  # `cpu_m` is an AHB manager with nothing attached on this boundary. Its
+  # response signals cannot be tied (a constant cannot express a bus response)
+  # nor left open (synthesis would tie hready low and wedge the matrix), so a
+  # responder answers them. The address-phase outputs simply go nowhere.
+  terminators:
+    - module: ahb_idle_slave
+      instance: u_cpu_m_idle
+      desc: "cpu_m manager has no slave on this boundary; answer AHB ERROR."
+      params: { DATA_W: 32 }
+      soc_ports:
+        htrans: cpu_m_htrans
+        hrdata: cpu_m_hrdata
+        hready: cpu_m_hready
+        hresp:  cpu_m_hresp
+      # Declared here because a wrapper cannot reference the SoC's parameters.
+      widths:
+        cpu_m_htrans: 2
+        cpu_m_hrdata: 32
+      bonded_refs:
+        hclk:    sys_hclk
+        hresetn: sys_hresetn
+
+  opens:
+    - status_o
+    - irq_o
+    # cpu_m address-phase outputs (htrans is consumed by the terminator)
+    - cpu_m_haddr
+    - cpu_m_hwrite
+    - cpu_m_hsize
+    - cpu_m_hburst
+    - cpu_m_hprot
+    - cpu_m_hwdata
+    - cpu_m_hmastlock

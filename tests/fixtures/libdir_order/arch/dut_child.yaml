@@ -1,0 +1,7 @@
+# The library's copy: no swdio (an external debug bus instead).
+module:
+  name: dut_child
+  gen: False
+  interfaces:
+    - { name: clk,     type: wire, direction: in, params: { WIDTH: 1 } }
+    - { name: dbg_bus, type: wire, direction: in, params: { WIDTH: 1 } }

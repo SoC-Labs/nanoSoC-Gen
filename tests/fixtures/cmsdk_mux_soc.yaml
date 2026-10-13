@@ -1,0 +1,110 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Fixture SoC for impl: cmsdk_mux, shaped like the Quickstart nanoSoC's CPU
+# subsystem interconnect:
+#   * a remap: rom at 0x0 by default, ram overlays 0x0 when remap[0] is set;
+#     both also visible at their own windows (rom at 0x0800_0000, ram alias
+#     at 0x1000_0000),
+#   * a passthrough TARGET 'system' reached only by the CPU (private path),
+#   * a passthrough INITIATOR 'ext_s' that shares the local targets with the
+#     CPU but cannot reach 'system' (no loop).
+
+module:
+  name: cmsdk_mux_soc
+  gen: True
+  desc: >
+    impl: cmsdk_mux fixture. Two initiators (CPU and an external passthrough
+    initiator), three local targets with a boot remap, and a passthrough
+    system window private to the CPU.
+
+  params:
+    SYS_CLK_FREQ_HZ: { type: int, default: 50000000, desc: "System clock (50 MHz)" }
+    SYS_ADDR_W:      { type: int, default: 32, desc: "System address width" }
+    SYS_DATA_W:      { type: int, default: 32, desc: "System data width" }
+    SRAM_RAM_ADDR_W: { type: int, default: 12, desc: "SRAM byte-address width (4 KB)" }
+
+  clocks:
+    - { name: sys_hclk, source: external, desc: "AHB clock" }
+
+  resets:
+    - { name: sys_hresetn, active: low, source: external, desc: "AHB reset" }
+
+  interfaces:
+    - { name: sys_hclk,       type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB clock in" }
+    - { name: sys_hresetn,    type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB reset in" }
+    - { name: sys_remap_ctrl, type: wire, direction: in, params: { WIDTH: 4 }, desc: "Remap control" }
+    - { name: sys_m, type: ahb, direction: initiator, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W }, desc: "System-window passthrough master-out" }
+    - { name: ext_s, type: ahb, direction: target, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W, EXCLUDE: [hready] }, desc: "External slave passthrough initiator endpoint" }
+
+  instances:
+    - instance_name: u_rom_0
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $SRAM_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: cmsdk_mux_ahb_interconnect.rom_0 }
+
+    - instance_name: u_ram_0
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $SRAM_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: cmsdk_mux_ahb_interconnect.ram_0 }
+
+    - instance_name: u_dat_0
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $SRAM_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: cmsdk_mux_ahb_interconnect.dat_0 }
+
+  interconnects:
+    - name: cmsdk_mux_ahb_interconnect
+      gen: True
+      impl: cmsdk_mux
+      type: ahb_lite
+      desc: "Split cmsdk_mux interconnect with a boot remap and a private passthrough"
+      params:
+        SYS_ADDR_W: $SYS_ADDR_W
+        SYS_DATA_W: $SYS_DATA_W
+      connections:
+        - { port: sys_hclk,       conn: sys_hclk }
+        - { port: sys_hresetn,    conn: sys_hresetn }
+        - { port: sys_remap_ctrl, conn: sys_remap_ctrl }
+      targets:
+        - { name: rom_0, instance: u_rom_0, base: 0x00000000, size: 0x08000000, sw_access: rx,  region_type: memory, phys_size: 0x00001000, desc: "Boot ROM" }
+        - { name: ram_0, instance: u_ram_0, base: 0x10000000, size: 0x08000000, sw_access: rwx, region_type: memory, phys_size: 0x00001000, desc: "Instruction RAM" }
+        - { name: dat_0, instance: u_dat_0, base: 0x18000000, size: 0x08000000, sw_access: rwx, region_type: memory, phys_size: 0x00001000, desc: "Data RAM" }
+        - { name: system, base: 0x20000000, size: 0xE0000000, sw_access: rw, region_type: ~, role: ~, passthrough: sys_m, desc: "System passthrough (CPU only)" }
+      initiators:
+        - name: cpu_m
+          targets:
+            - name: rom_0
+              visibility:
+                - base: 0x00000000
+                - base: 0x08000000
+            - name: ram_0
+              visibility:
+                - base: 0x00000000
+                  remap: { remapping: true, remap_behaviour: alias, remap_bit: 0 }
+                - base: 0x10000000
+            - name: dat_0
+            - name: system
+        - name: ext_s
+          passthrough: ext_s
+          targets:
+            - name: rom_0
+              visibility:
+                - base: 0x00000000
+                - base: 0x08000000
+            - name: ram_0
+              visibility:
+                - base: 0x00000000
+                  remap: { remapping: true, remap_behaviour: alias, remap_bit: 0 }
+                - base: 0x10000000
+            - name: dat_0

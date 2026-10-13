@@ -1,0 +1,14 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Guard fixture RAM region: rtl/guard_ram_region.v puts sl_ahb_sram behind it.
+module:
+  name: guard_ram_region
+  gen: False
+  desc: "RAM region (sl_ahb_sram, RAM_ADDR_W is a BYTE width)"
+  params:
+    SYS_ADDR_W: { type: int, default: 32, desc: "System address width" }
+    SYS_DATA_W: { type: int, default: 32, desc: "System data width" }
+    RAM_ADDR_W: { type: int, default: 12, desc: "RAM byte address width" }
+  interfaces:
+    - { name: HCLK,    type: wire, direction: in, params: { WIDTH: 1 }, desc: AHB clock }
+    - { name: HRESETn, type: wire, direction: in, params: { WIDTH: 1 }, desc: AHB reset }
+    - { name: ahb_slave, type: ahb, direction: target, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W, EXCLUDE: [hburst, hmastlock] }, desc: AHB slave port }

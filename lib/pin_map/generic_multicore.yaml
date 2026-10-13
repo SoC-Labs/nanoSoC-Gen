@@ -1,0 +1,164 @@
+# Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+# SPDX-License-Identifier: Apache-2.0
+#
+# MIXED-I/O pad ring for the multicore chip top (nanosoc_multicore_chip), in the
+# bundled EXAMPLE pad technology `generic` (lib/pad_tech/generic.yaml).
+#   soc_model ... --chip-boundary nanosoc_multicore --pad-tech generic --pin-count multicore
+# A foundry ring uses the same pad list with that technology's pin map, from a
+# pad pack (--pad-tech-dir / $NANOSOC_PAD_TECH_DIR).
+#
+# The pad ring is driven from an explicit per-signal pad list (mode: mixed). Each
+# pad names the chip-top net(s) it bonds to and a pad cell kind; the cell modules
+# come from the pad tech (input_cell / output_cell / bidir_cell / bidir_io_cell).
+# body_flavour is irrelevant here (no nanosoc_chip_cfg): each pad wires directly
+# to a chip-top port.
+#
+# The 39 bonded signals (= chip-top boundary, re-exposed 1:1 from the soc) are
+# verified against lib/chip_boundary/nanosoc_multicore.yaml.
+#
+# pad-cell kind vocabulary
+#   input        : pure-input pad     (in  = chip-top output net -> core)
+#   output       : pure-output pad    (out = chip-top output net -> pad)
+#   tristate_out : output + OE pad    (out + oe; pad floats when disabled)
+#   bidir        : in/out/oe triplet  (one pad; width>1 -> per-bit pads)
+#
+# oe_polarity = sense of the chip-top OE net (active_high|active_low). The pad
+# cell's enable is active-low; the backend inverts active-high enables into a
+# per-pad `_z` net automatically.
+
+pin_map:
+  tech:         generic
+  pin_count:    62                       # 43 signal pins + ~16 power/ground + corners
+  mode:         mixed                    # selects nanosoc_chip_pads_mixed.v.j2
+  chip_module:  nanosoc_multicore_chip   # the bonded chip top this ring wraps
+  body_flavour: direct                   # bare chip top (no nanosoc_chip_cfg)
+  boundary_supplies: none                # supply pins are pad cells, not ports
+
+  # =====================================================================
+  # SIGNAL PADS  (per-signal; chip-top net names == chip_boundary inner nets)
+  # Grouped (clk/reset/test/swd/jtag/uart/eth_rmii/eth_mdio/qspi/spi/hostio4/pps)
+  # for readability; the builder flattens groups to a single ordered pad list.
+  # =====================================================================
+  pads:
+
+    # ---- clocks (3 input pads) ----------------------------------------
+    clk:
+      - { name: sys_fclk,     kind: input, in: sys_fclk,     pin_side: top }
+      - { name: rmii_ref_clk, kind: input, in: rmii_ref_clk, pin_side: top }
+      - { name: rtc_clk,      kind: input, in: rtc_clk,      pin_side: top }
+
+    # ---- reset (1 input pad) ------------------------------------------
+    reset:
+      - { name: sys_sysresetn, kind: input, in: sys_sysresetn, pin_side: top }
+
+    # ---- test / scan (2 input pads) -----------------------------------
+    test:
+      - { name: sys_scanenable, kind: input, in: sys_scanenable, pin_side: top }
+      - { name: sys_testmode,   kind: input, in: sys_testmode,   pin_side: top }
+
+    # ---- serial-wire debug (1 input clk + 1 bidir data) ---------------
+    swd:
+      - { name: dap_swclktck, kind: input, in: dap_swclktck, pin_side: left }
+      - name: swdio
+        kind: bidir
+        width: 1
+        in:  dap_swditms                 # pad -> core (SWDIO_in / TMS)
+        out: dap_swdo                    # core -> pad
+        oe:  dap_swdoen                  # output enable (active high)
+        oe_polarity: active_high
+        pin_side: left
+
+    # ---- JTAG (TDI in, TRSTn in, TDO tristate) ------------------------
+    jtag:
+      - { name: jtag_tdi,   kind: input, in: dap_tdi,   pin_side: left }
+      - { name: jtag_ntrst, kind: input, in: dap_ntrst, pin_side: left }
+      - name: jtag_tdo
+        kind: tristate_out
+        width: 1
+        out: dap_tdo                     # JTAG TDO
+        oe:  dap_ntdoen                  # TDO output enable, ACTIVE LOW
+        oe_polarity: active_low
+        pin_side: left
+
+    # ---- UART (CPU0 + CPU1) -------------------------------------------
+    uart:
+      - { name: uart_rxd,      kind: input,  in:  uart_rxd,      pin_side: left }
+      - { name: uart_txd,      kind: output, out: uart_txd,      pin_side: left }
+      # `name` is the pad / pin label; `in`/`out` name the chip wrapper's nets,
+      # which carry the INNER SoC port names — renamed by 548cbed
+      # (cpu1_* -> chip_core_*). The two used to coincide, which is exactly how
+      # the rename slipped past this file unnoticed.
+      - { name: cpu1_uart_rxd, kind: input,  in:  chip_core_uart_rxd, pin_side: left }
+      - { name: cpu1_uart_txd, kind: output, out: chip_core_uart_txd, pin_side: left }
+
+    # ---- ethernet RMII -------------------------------------------------
+    eth_rmii:
+      - { name: rmii_txd,    kind: output, width: 2, out: rmii_txd,    pin_side: bottom }
+      - { name: rmii_tx_en,  kind: output,           out: rmii_tx_en,  pin_side: bottom }
+      - { name: rmii_rxd,    kind: input,  width: 2, in:  rmii_rxd,    pin_side: bottom }
+      - { name: rmii_crs_dv, kind: input,            in:  rmii_crs_dv, pin_side: bottom }
+
+    # ---- ethernet MDIO (MDC out, MDIO bidir) --------------------------
+    eth_mdio:
+      - { name: mdc, kind: output, out: mdc_pad_o, pad: MDC, pin_side: bottom }
+      - name: mdio
+        kind: bidir
+        width: 1
+        in:  md_pad_i
+        out: md_pad_o
+        oe:  md_padoe_o
+        oe_polarity: active_high
+        pin_side: bottom
+
+    # ---- QSPI flash (sclk out, csn out, io[3:0] bidir bus) ------------
+    qspi:
+      - { name: qspi_sclk, kind: output, out: qspi_sclk, pin_side: right }
+      - { name: qspi_csn,  kind: output, out: qspi_csn,  pin_side: right }
+      - name: qspi_io
+        kind: bidir
+        width: 4
+        in:  qspi_io_i                   # pad -> core [3:0]
+        out: qspi_io_o                   # core -> pad [3:0]
+        oe:  qspi_io_e                   # per-bit output enable [3:0]
+        oe_polarity: active_high
+        pin_side: right
+
+    # ---- SPI master (PL022): sclk/mosi/ss out, miso in ----------------
+    # spi_ss is a 3-bit bus -> 3 physical chip-select pads (SPI_SS[2:0]).
+    spi:
+      - { name: spi_sclk, kind: output,          out: spi_sclk, pin_side: right }
+      - { name: spi_mosi, kind: output,          out: spi_mosi, pin_side: right }
+      - { name: spi_miso, kind: input,           in:  spi_miso, pin_side: right }
+      - { name: spi_ss,   kind: output, width: 3, out: spi_ss,  pin_side: right }
+
+    # ---- HOSTIO4 P1 (7-bit bidir bus) ---------------------------------
+    hostio4:
+      - name: hostio4
+        kind: bidir
+        width: 7
+        in:  hostio4_p1_in               # host -> SoC [6:0]
+        out: hostio4_p1_out              # SoC -> host [6:0]
+        oe:  hostio4_p1_outen            # per-bit output enable [6:0]
+        oe_polarity: active_high
+        pin_side: right
+
+    # ---- PPS (1 output pad) -------------------------------------------
+    pps:
+      - { name: phc_pps_out, kind: output, out: phc_pps_out, pad: PPS, pin_side: right }
+
+  # =====================================================================
+  # POWER / GROUND RING (16 pads, generic power cells).
+  #
+  # pin_side: PLACEHOLDER .io ring placement (M6). Distributes the supply pads
+  # across the four ring sides, so the generated nanosoc_io_plan_*.io places
+  # signal AND power pads. A real floorplan is a PnR output: these sides and the
+  # offsets in the .io are even-spacing placeholders, not a committed placement.
+  # Single string -> applies to every instance of the row; a list -> per-instance
+  # side (length == count).
+  # =====================================================================
+  power_pads:
+    - { cell: PAD_VDDIO,  prefix: uPAD_VDDIO,  count: 3, net: VDDIO,  pin_side: [top, left, right] }
+    - { cell: PAD_VSSIO,  prefix: uPAD_VSSIO,  count: 2, net: VSS,    pin_side: [left, right] }
+    - { cell: PAD_VDDSOC, prefix: uPAD_VDD,    count: 4, net: VDD,    pin_side: [top, left, bottom, right] }
+    - { cell: PAD_VSS,    prefix: uPAD_VSS,    count: 4, net: VSS,    pin_side: [top, left, bottom, right] }
+    - { cell: PAD_VDDSOC, prefix: uPAD_VDDACC, count: 3, net: VDDACC, pin_side: [left, bottom, right] }

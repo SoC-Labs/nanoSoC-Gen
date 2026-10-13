@@ -1,0 +1,43 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Hermetic fixture region — a tiny AHB->APB peripheral bridge target.
+# gen:False; exposes an AHB slave plus the APB-side passthrough wires.
+# Referenced by apb_bridge_soc.yaml via a target with protocol: apb.
+
+module:
+  name: tiny_apb_periph
+  gen: False
+  desc: >
+    Minimal AHB-to-APB peripheral region. One AHB slave port feeding an APB
+    output bundle. Self-contained fixture component.
+
+  params:
+    SYS_ADDR_W: { type: int, default: 32, desc: "System address width" }
+    SYS_DATA_W: { type: int, default: 32, desc: "System data width" }
+    APB_ADDR_W: { type: int, default: 12, desc: "APB address width" }
+    APB_DATA_W: { type: int, default: 32, desc: "APB data width" }
+
+  interfaces:
+    - { name: HCLK,    type: wire, direction: in, params: { WIDTH: 1 }, desc: AHB clock }
+    - { name: HRESETn, type: wire, direction: in, params: { WIDTH: 1 }, desc: AHB reset (active low) }
+    - { name: PCLK,    type: wire, direction: in, params: { WIDTH: 1 }, desc: APB clock }
+    - { name: PRESETn, type: wire, direction: in, params: { WIDTH: 1 }, desc: APB reset (active low) }
+    - { name: PCLKEN,  type: wire, direction: in, params: { WIDTH: 1 }, desc: APB clock enable }
+    - { name: ahb_slave, type: ahb, direction: target, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W }, desc: AHB slave port }
+
+    # APB passthrough outputs
+    - { name: APB_PSEL,    type: wire, direction: out, params: { WIDTH: 1 },          desc: APB select passthrough }
+    - { name: APB_PENABLE, type: wire, direction: out, params: { WIDTH: 1 },          desc: APB enable passthrough }
+    - { name: APB_PWRITE,  type: wire, direction: out, params: { WIDTH: 1 },          desc: APB write passthrough }
+    - { name: APB_PADDR,   type: wire, direction: out, params: { WIDTH: $APB_ADDR_W }, desc: APB address passthrough }
+    - { name: APB_PWDATA,  type: wire, direction: out, params: { WIDTH: $APB_DATA_W }, desc: APB write data passthrough }
+    - { name: APB_PRDATA,  type: wire, direction: in,  params: { WIDTH: $APB_DATA_W }, desc: APB read data }
+    - { name: APB_PREADY,  type: wire, direction: in,  params: { WIDTH: 1 },          desc: APB ready }
+
+  # Internal address decode: one APB slot carrying a register map. Lets the
+  # discovery / rdl backends find the register map when they recurse into the
+  # resolved child module (rdl collects from module.address_decode slots).
+  address_decode:
+    type: apb_slave_mux
+    module: cmsdk_apb_slave_mux
+    slots:
+      - { slot: 0, name: regs_0, module: tiny_apb_periph, offset: 0x0000, size: 0x1000, register_map: register_maps/tiny_regs.yaml, desc: "Register block" }

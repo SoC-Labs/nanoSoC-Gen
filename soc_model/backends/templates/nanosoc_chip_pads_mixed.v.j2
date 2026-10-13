@@ -1,0 +1,99 @@
+//-----------------------------------------------------------------------------
+// {{ module_name }} — mixed-I/O pad ring for {{ chip_module }}
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Template:  nanosoc_chip_pads_mixed.v.j2
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+// Per-signal pad ring (kinds: input / output / tristate_out / bidir; single +
+// bus).  Wraps the bonded chip top {{ chip_module }}, instantiating one pad cell
+// per bonded signal (bus -> per-bit cells) plus the power/ground ring.
+//
+//   input        -> input_cell   (receiver on, driver off)
+//   output       -> output_cell  (driver on,  receiver off)
+//   bidir        -> bidir_cell   (in/out + active-low OEN; pull = z & o)
+//   tristate_out -> bidir_io_cell (no-pull; OEN driven, receive leg parked)
+//
+// Active-high chip output-enables are inverted into a per-pad active-low `_z`
+// net (the pad cell's OEN convention); active-low enables wire straight through.
+//-----------------------------------------------------------------------------
+{% if pin_map.pre_module %}
+{{ pin_map.pre_module }}
+{% endif %}
+
+module {{ module_name }} (
+{% if pin_map.boundary_supplies in ('ifdef_off_ports', 'unconditional') %}
+{% for s in pin_map.supply_ports %}
+  inout  wire          {{ s }},
+{% endfor %}
+{% endif %}
+{% for p in boundary_ports %}
+  {{ '%-6s'|format(p.direction) }} wire {{ '%-8s'|format(p.width_str) }} {{ p.name }}{{ "" if loop.last else "," }}  // {{ p.comment }}
+{% endfor %}
+  );
+
+//------------------------------------
+// internal nets bridging pad cells <-> {{ chip_module }}
+//  - chip-top in/out/oe nets (driven/read by the pad cells)
+//  - active-low output-enable nets (_z) derived from the chip's OE polarity
+//  - dangling receive-leg sinks (_nc) for output / tristate pads
+
+{% for w in chip_wires %}
+  wire  {{ '%-8s'|format(w.width_str) }} {{ w.name }};
+{% endfor %}
+
+{% for w in oe_wires %}
+  wire  {{ '%-8s'|format(w.width_str) }} {{ w.name }} = {{ w.expr }};  // active-low OEN
+{% endfor %}
+{% for w in sink_wires %}
+  wire  {{ '%-8s'|format(w.width_str) }} {{ w.name }};  // unconnected receive leg
+{% endfor %}
+
+ wire tiehi = 1'b1;
+ wire tielo = 1'b0;
+
+ // --------------------------------------------------------------------------------
+ // Bonded chip top
+ // --------------------------------------------------------------------------------
+
+  {{ chip_module }} u_{{ chip_module }} (
+{% for c in chip_connections %}
+    .{{ '%-20s'|format(c.port) }} ({{ c.expr }}){{ "" if loop.last else "," }}
+{% endfor %}
+  );
+
+ // --------------------------------------------------------------------------------
+ // IO pads (pad-technology library mapping: {{ pad_tech.name }})
+ // --------------------------------------------------------------------------------
+
+// Pad IO power supplies
+
+{% for pp in power_pads %}
+{% if pp.commented %}
+//{{ pp.cell }} {{ pp.inst }}(
+//   .{{ pp.supply_port }}({{ pp.net }})
+//   );
+{% else %}
+{{ pp.cell }} {{ pp.inst }}(
+{% if pp.supply_connect %}
+   .{{ pp.supply_port }}({{ pp.net }})
+{% endif %}
+   );
+{% endif %}
+{% endfor %}
+
+// Signal pads
+
+{% for inst in pad_instances %}
+{{ inst.module }} {{ inst.inst }} (
+{% for line in inst.lines %}
+    {{ line }}{% if not loop.last %},{% endif %}
+
+{% endfor %}
+   );
+
+{% endfor %}
+endmodule

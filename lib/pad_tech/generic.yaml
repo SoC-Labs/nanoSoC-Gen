@@ -1,0 +1,96 @@
+# Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+# SPDX-License-Identifier: Apache-2.0
+#
+# generic — the bundled EXAMPLE pad technology.
+#
+# Its cells are the behavioural pad models of the SoC Labs generic library
+# (generic_lib_tech: pads/verilog/PAD_INOUT8MA_NOE.v, PAD_VDDIO.v, PAD_VSSIO.v,
+# PAD_VDDSOC.v, PAD_VSS.v), so a ring rendered with it simulates with no
+# foundry library. Foundry pad technologies are not bundled: they come from a
+# pad pack (--pad-tech-dir / $NANOSOC_PAD_TECH_DIR; soc_model/pad_packs.py).
+#
+# Expression placeholders in a port_map:
+#   {i} {o} {e} {z}  per-bit nets of a GPIO / bidir pad (in, out, enable, active-low enable)
+#   {c}              the core-side net of a control or input pad
+#   {pad}            the boundary port (bit-indexed for a bus)
+#   tiehi / tielo    the constant nets of the ring body
+pad_tech:
+  name: generic
+  flavour: generic
+  gpio_tio: 4
+  constants:
+    tiehi: "1'b1"
+    tielo: "1'b0"
+
+  # Bidirectional pad: PAD, O (core -> pad), I (pad -> core), NOE (active-low enable).
+  bidir_cell:
+    module: PAD_INOUT8MA_NOE
+    port_map:
+      PAD: "{pad}"
+      O:   "{o}"
+      I:   "{i}"
+      NOE: "{z}"
+
+  # Input pad: driver off (NOE high), receiver on.
+  input_cell:
+    module: PAD_INOUT8MA_NOE
+    port_map:
+      PAD: "{pad}"
+      O:   "tielo"
+      I:   "{c}"
+      NOE: "tiehi"
+
+  # Tristate / SWDIO pad.
+  bidir_io_cell:
+    module: PAD_INOUT8MA_NOE
+    port_map:
+      PAD: "{pad}"
+      O:   "{o}"
+      I:   "{i}"
+      NOE: "{z}"
+
+  # Output pad: always driving (NOE low); the receive leg goes to a sink net.
+  output_cell:
+    module: PAD_INOUT8MA_NOE
+    port_map:
+      PAD: "{pad}"
+      O:   "{o}"
+      I:   "{c}"
+      NOE: "tielo"
+
+  # Power / ground pads: the supply is the cell's PAD port.
+  power_cells:
+    PAD_VDDIO:  { supply_port: PAD }
+    PAD_VSSIO:  { supply_port: PAD }
+    PAD_VDDSOC: { supply_port: PAD }
+    PAD_VSS:    { supply_port: PAD }
+
+  supply_connect: true
+
+  # Column-align the '(' of each port connection (.PAD (X) / .O   (X)).
+  align_ports: true
+
+  # Power intent for the UPF emitter (soc_model/backends/upf.py). Example
+  # values: a real technology states its own corner voltage and macro pins.
+  upf:
+    profile: synopsys_aon
+    scope: nanosoc_chip_pads
+    supply_sets:
+      VDD_VSS:    { power: VDD,    ground: VSS }
+      VDDACC_VSS: { power: VDDACC, ground: VSS }
+    domains:
+      - { name: ACCEL, supply_set: VDDACC_VSS, root: null }
+      - { name: TOP,   supply_set: VDD_VSS }
+    supply_ports: [VDDACC, VDD, VSS]
+    pst:
+      voltage: 1.00
+      ground_voltage: 0.00
+      state_name: state1
+      pst_name: all_pst
+      pst_state: aon
+      supplies: [VDDACC, VDD, VSS]
+    top_prefix: "u_nanosoc_multicore_chip/u_soc"
+    macro_leaf: u_mem_macro
+    mem_power_pins:
+      sram: { vdd: VDD, vss: VSS }
+      rom:  { vdd: VDD, vss: VSS }

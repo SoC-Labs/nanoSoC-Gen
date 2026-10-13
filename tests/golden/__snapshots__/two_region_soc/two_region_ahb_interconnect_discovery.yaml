@@ -1,0 +1,166 @@
+# Auto-generated discovery table register map for two_region_ahb_interconnect
+# Generated: 2026-06-09 18:56:10
+# DO NOT EDIT — regenerate with soc_model
+
+register_map:
+  name: two_region_ahb_interconnect_discovery
+  module: two_region_ahb_interconnect_discovery_table
+  gen: true
+  description: Auto-generated device discovery table for two_region_ahb_interconnect. Read-only registers encoding 2 targets
+    and 1 initiators with address maps and visibility.
+  address_width: 12
+  data_width: 32
+  registers:
+  - name: TABLE_ID
+    offset: '0x000'
+    width: 32
+    access: RO
+    description: Magic number 0x534F4344 ("SOCD") identifying a discovery table
+    reset_value: '0x534F4344'
+  - name: TABLE_VERSION
+    offset: '0x004'
+    width: 32
+    access: RO
+    description: Discovery table format version
+    reset_value: '0x00000001'
+    fields:
+    - name: VERSION
+      bits: '15:0'
+      access: RO
+      description: Format version number
+      reset_value: 1
+    - name: RESERVED
+      bits: '31:16'
+      access: RO
+      description: Reserved for future use
+      reset_value: 0
+  - name: TABLE_SIZE
+    offset: '0x008'
+    width: 32
+    access: RO
+    description: Number of targets, initiators, and address width
+    reset_value: '0x00200102'
+    fields:
+    - name: NUM_TARGETS
+      bits: '7:0'
+      access: RO
+      description: Number of target descriptors
+      reset_value: 2
+    - name: NUM_INITIATORS
+      bits: '15:8'
+      access: RO
+      description: Number of initiator descriptors
+      reset_value: 1
+    - name: ADDR_WIDTH
+      bits: '31:16'
+      access: RO
+      description: System address width in bits
+      reset_value: 32
+  - name: INTERCONNECT_NAME
+    offset: '0x00C'
+    width: 32
+    access: RO
+    description: 'Interconnect short name (4-char packed ASCII): "two_"'
+    reset_value: '0x5F6F7774'
+  - name: TGT_0_BASE
+    offset: '0x010'
+    width: 32
+    access: RO
+    description: Target 0 (sram_0) base address
+    reset_value: '0x00000000'
+  - name: TGT_0_SIZE
+    offset: '0x014'
+    width: 32
+    access: RO
+    description: Target 0 (sram_0) address window size
+    reset_value: '0x00001000'
+  - name: TGT_0_ATTR
+    offset: '0x018'
+    width: 32
+    access: RO
+    description: Target 0 (sram_0) attributes
+    reset_value: '0x00000041'
+    fields:
+    - name: REGION_TYPE
+      bits: '3:0'
+      access: RO
+      description: Region type (0=unknown, 1=memory, 2=periph, 3=debug)
+      reset_value: 1
+    - name: SW_ACCESS
+      bits: '7:4'
+      access: RO
+      description: Software access (0=none, 1=ro, 2=wo, 3=rw, 4=rwx)
+      reset_value: 4
+    - name: PROTOCOL
+      bits: '15:8'
+      access: RO
+      description: Bus protocol (0=ahb, 1=apb)
+      reset_value: 0
+    - name: TARGET_ID
+      bits: '23:16'
+      access: RO
+      description: Unique target index
+      reset_value: 0
+  - name: TGT_0_NAME
+    offset: '0x01C'
+    width: 32
+    access: RO
+    description: 'Target 0 short name (4-char packed ASCII): "sram"'
+    reset_value: '0x6D617273'
+  - name: TGT_1_BASE
+    offset: '0x020'
+    width: 32
+    access: RO
+    description: Target 1 (sram_1) base address
+    reset_value: '0x10000000'
+  - name: TGT_1_SIZE
+    offset: '0x024'
+    width: 32
+    access: RO
+    description: Target 1 (sram_1) address window size
+    reset_value: '0x00001000'
+  - name: TGT_1_ATTR
+    offset: '0x028'
+    width: 32
+    access: RO
+    description: Target 1 (sram_1) attributes
+    reset_value: '0x00010041'
+    fields:
+    - name: REGION_TYPE
+      bits: '3:0'
+      access: RO
+      description: Region type (0=unknown, 1=memory, 2=periph, 3=debug)
+      reset_value: 1
+    - name: SW_ACCESS
+      bits: '7:4'
+      access: RO
+      description: Software access (0=none, 1=ro, 2=wo, 3=rw, 4=rwx)
+      reset_value: 4
+    - name: PROTOCOL
+      bits: '15:8'
+      access: RO
+      description: Bus protocol (0=ahb, 1=apb)
+      reset_value: 0
+    - name: TARGET_ID
+      bits: '23:16'
+      access: RO
+      description: Unique target index
+      reset_value: 1
+  - name: TGT_1_NAME
+    offset: '0x02C'
+    width: 32
+    access: RO
+    description: 'Target 1 short name (4-char packed ASCII): "sram"'
+    reset_value: '0x6D617273'
+  - name: INIT_0_NAME
+    offset: '0x030'
+    width: 32
+    access: RO
+    description: 'Initiator 0 short name (4-char packed ASCII): "cpu_"'
+    reset_value: '0x5F757063'
+  - name: INIT_0_VISIBILITY
+    offset: '0x034'
+    width: 32
+    access: RO
+    description: Initiator 0 (cpu_m) target visibility bitmask
+    reset_value: '0x00000003'

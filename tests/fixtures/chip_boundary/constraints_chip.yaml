@@ -1,0 +1,44 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Hermetic chip-boundary fixture for the timing-constraints backend.
+#
+# Grouped-mapping form (clk / reset / swd / hostio4), matching the bundled
+# multicore spec shape, so the SDC pad-cell block (uPAD_SWDIO_IO + the
+# uPAD_HOSTIO4_* bus), the boundary-classified input delays, and the swd
+# false-paths are all exercised against constraints_soc.
+
+chip_boundary:
+  chip_module:  constraints_chip
+  inner_module: constraints_soc
+
+  pads:
+    clk:
+      - { chip_port: sys_fclk,     pad_kind: input, width: 1, in: sys_fclk }
+      - { chip_port: rmii_ref_clk, pad_kind: input, width: 1, in: rmii_ref_clk }
+
+    reset:
+      - { chip_port: sys_sysresetn, pad_kind: input, width: 1, in: sys_sysresetn }
+
+    swd:
+      - { chip_port: dap_swclktck, pad_kind: input, width: 1, in: dap_swclktck }
+      - chip_port: swdio
+        pad_kind: bidir
+        width: 1
+        in:  dap_swditms
+        out: dap_swdo
+        oe:  dap_swdoen
+        oe_polarity: active_high
+
+    hostio4:
+      - chip_port: hostio4
+        pad_kind: bidir
+        width: 7
+        in:  hostio4_p1_in
+        out: hostio4_p1_out
+        oe:  hostio4_p1_outen
+        oe_polarity: active_high
+
+  ties:
+    - { soc_port: cpu_0_nmi, const: "1'b0" }
+
+  opens:
+    - cpu_0_lockup

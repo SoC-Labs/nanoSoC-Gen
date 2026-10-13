@@ -1,0 +1,49 @@
+//-----------------------------------------------------------------------------
+// AHB Interconnect IP Filelist
+//
+// Contributors
+//
+// David Mapstone (d.a.mapstone@soton.ac.uk)
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Source:    {{ source_yaml }}
+// Template:  {{ template_name }}
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+
+// ============= Verilog library extensions ===========
++libext+.v+.vlib+.sv
+
+// =============    Packages (must precede modules that import them)    =============
+// Discovery table package + module
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}_discovery/{{ interconnect_name }}_discovery_pkg.sv
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}_discovery/{{ interconnect_name }}_discovery.sv
+// Interconnect configuration package
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}/{{ module_prefix }}_config_pkg.sv
+
+// =============    AHB Interconnect Wrapper    =============
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}/{{ module_name }}.sv
+
+// =============    AHB BusMatrix IP - Arbiters (one per target)    =============
+{% for entry in all_targets %}
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}/{{ interconnect_name }}/{{ module_prefix }}_arbiter_{{ entry.name | upper }}.v
+{% endfor %}
+
+// =============    AHB BusMatrix IP - Fixed files    =============
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}/{{ interconnect_name }}/{{ interconnect_name }}_default_slave.v
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}/{{ interconnect_name }}/{{ interconnect_name }}_lite.v
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}/{{ interconnect_name }}/{{ interconnect_name }}.v
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}/{{ interconnect_name }}/{{ module_prefix }}_inititator_input.v
+
+// =============    AHB BusMatrix IP - Matrix Decoders (one per initiator)    =============
+{% for init in initiators %}
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}/{{ interconnect_name }}/{{ module_prefix }}_matrix_decode_{{ init | upper }}.v
+{% endfor %}
+
+// =============    AHB BusMatrix IP - Target Outputs (one per target)    =============
+{% for entry in all_targets %}
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}/{{ interconnect_name }}/{{ module_prefix }}_target_output_{{ entry.name | upper }}.v
+{% endfor %}

@@ -1,0 +1,38 @@
+//-----------------------------------------------------------------------------
+// AHB Interconnect IP Filelist (impl: cmsdk_mux)
+// Written by SoC Labs. Lists SoC Labs files only; the Cortex-M0 Quickstart
+// components the core instantiates are named below and in
+// cmsdk_mux_components.flist, referenced by path and never copied.
+//
+// Copyright (C) 2026, SoC Labs (www.soclabs.org)
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Source:    {{ source_yaml }}
+// Template:  {{ template_name }}
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+
+// ============= Verilog library extensions ===========
++libext+.v+.vlib+.sv
+
+// =============    Packages (must precede modules that import them)    =============
+// Discovery table package + module
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}_discovery/{{ interconnect_name }}_discovery_pkg.sv
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}_discovery/{{ interconnect_name }}_discovery.sv
+// Interconnect configuration package
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}/{{ module_prefix }}_config_pkg.sv
+
+// =============    AHB Interconnect Wrapper    =============
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}/{{ module_name }}.sv
+
+// =============    AHB Interconnect core (SoC Labs, impl: cmsdk_mux)    =============
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/{{ interconnect_name }}/{{ busmatrix_lite_name }}.v
+
+// =============    Arm Quickstart components    =============
+// {{ busmatrix_lite_name }} instantiates these three, which are NOT listed here: a
+// SoC must compile each exactly once, and two cmsdk_mux interconnects would
+// otherwise list them twice. Include cmsdk_mux_components.flist once per SoC,
+// or list whichever your flow does not already carry:
+{% for c in cmsdk_components %}
+//   $(ARM_CORSTONE_101_DIR)/{{ c }}
+{% endfor %}

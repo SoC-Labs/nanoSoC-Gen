@@ -1,0 +1,64 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+#
+# Default system-completeness rules (validation tier 3, roadmap doc 06a).
+# Evaluated by soc_model/completeness.py over the BUILT model; the
+# configurator renders these as a checklist and GATES the build on errors.
+# A project ships its own copy (configurator adapter `rules:` key) — this
+# bundled default encodes nanosoc-multicore policy and works for the
+# fixtures too. One predicate per rule; see completeness.py for the
+# predicate vocabulary.
+
+rules:
+  - id: cpu-initiator
+    level: error
+    desc: At least one CPU master drives an interconnect
+    require: { initiator_module_matches: "(cpu|cm0|m0plus|eth_ss)" }
+    hint: Add a CPU subsystem instance and list it under the interconnect's initiators
+
+  - id: memory-target
+    level: error
+    desc: At least one memory target exists
+    require: { min_targets: { region_type: memory, count: 1 } }
+    hint: Add an SRAM/IMEM region instance with an addressable target window
+
+  - id: clock-present
+    level: error
+    desc: An external clock wire reaches the boundary
+    require: { external_wires: ["*clk*|*fclk*|*hclk*"] }
+    hint: "Add a clock input wire interface (e.g. sys_fclk or sys_hclk)"
+
+  - id: reset-present
+    level: error
+    desc: An external reset wire reaches the boundary
+    require: { external_wires: ["*resetn*|*rst*"] }
+    hint: "Add a reset input wire interface (e.g. sys_sysresetn)"
+
+  - id: bootrom-role
+    level: warning
+    desc: A target declares role bootrom (cold-boot entry)
+    require: { target_role: bootrom }
+    hint: "Mark the boot ROM window with role: bootrom (or rely on IMEM preload)"
+
+  - id: debug-access
+    level: warning
+    desc: A debug initiator (DAP/SWD) can reach the system
+    require: { initiator_module_matches: "(dap|swj|debug)" }
+    hint: SWD bring-up and the demo GUI need a debug master on the matrix
+
+  - id: firmware-targets
+    level: error
+    desc: Every firmware linker region names a real target window
+    require: { firmware_regions_resolve: true }
+    hint: Fix the linker_profiles region target names (or remove the stale profile)
+
+  - id: apb-config
+    level: error
+    desc: Every APB target carries an apb_config bridge block
+    require: { apb_targets_have_config: true }
+    hint: "Add apb_config: { bridge: cmsdk_ahb_to_apb, params: {...} } to the target"
+
+  - id: uart-present
+    level: info
+    desc: A UART exists for console bring-up
+    require: { instance_module_matches: "uart" }
+    hint: Without a UART, first-boot verification is blind (SWD-only)

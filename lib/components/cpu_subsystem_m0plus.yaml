@@ -1,0 +1,15 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+component:
+  id: cpu_subsystem_m0plus
+  module: nanosoc_ss_cpu_plus
+  category: cpu
+  label: "Cortex-M0+ CPU Subsystem"
+  desc: "ARM Cortex-M0+ core with boot ROM, instruction + data memory and an
+    internal bus matrix. The chip-control compute block — drop in and size."
+  knobs:
+    - { param: IMEM_RAM_ADDR_W, label: "Instruction memory", kind: addr_w,
+        default: 15, min: 13, max: 17, desc: "CPU IMEM." }
+    - { param: DMEM_RAM_ADDR_W, label: "Data memory", kind: addr_w,
+        default: 15, min: 13, max: 16, desc: "CPU DMEM." }
+    - { param: BOOTROM_ADDR_W, label: "Boot ROM", kind: addr_w,
+        default: 11, min: 10, max: 13 }

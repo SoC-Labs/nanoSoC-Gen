@@ -1,0 +1,23 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Droppable component package — Ethernet subsystem (configurator doc 06a).
+component:
+  id: ethernet_subsystem
+  module: ethernet_ss_ahb_rmii
+  category: subsystem
+  label: "Ethernet Subsystem (RMII + PTP)"
+  desc: "Cortex-M0+ core, Ethernet MAC + HA1588 PTP, boot ROM and local
+    memories, RMII PHY boundary. A complete networking subsystem — drop in
+    and size its memories."
+  window_size: 512M
+  knobs:
+    - { param: IMEM_RAM_ADDR_W, label: "Instruction memory", kind: addr_w,
+        default: 16, min: 15, max: 18,
+        desc: "CPU0 IMEM. The udp_echo app needs ~47 KB, so the floor is 32 KB." }
+    - { param: DMEM_RAM_ADDR_W, label: "Data memory", kind: addr_w,
+        default: 14, min: 13, max: 16, desc: "CPU0 DMEM (stack/heap/BSS)." }
+    - { param: ETH_SCRATCH_RX_ADDR_W, label: "RX scratch SRAM", kind: addr_w,
+        default: 14, min: 13, max: 15, desc: "Ethernet RX descriptor/buffer SRAM." }
+    - { param: ETH_SCRATCH_TX_ADDR_W, label: "TX scratch SRAM", kind: addr_w,
+        default: 14, min: 13, max: 15, desc: "Ethernet TX descriptor/buffer SRAM." }
+    - { param: BOOTROM_ADDR_W, label: "Boot ROM", kind: addr_w,
+        default: 13, min: 11, max: 14, desc: "Stage-0 boot ROM." }

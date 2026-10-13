@@ -1,0 +1,44 @@
+# Auto-generated CMake memory map
+# Source:    {{ source_yaml }}
+# Generated: {{ generated_date }}
+#
+# DO NOT EDIT — regenerate with gen_firmware_config.py
+#
+# Consumed by NanoSoCFirmware (firmware/cmake/NanoSoCFirmwareFunctions.cmake)
+# via include() from the consumer's CMakeLists.txt. Defines per-region
+# addresses and per-profile linker bases that nanosoc_add_test() reads.
+
+{% if cpu %}
+# Default target CPU for this SoC (used as fallback when consumer
+# CMakePresets.json doesn't set NANOSOC_CPU explicitly).
+set(NanoSoC_DEFAULT_CPU "{{ cpu }}")
+
+{% endif %}
+# Memory region base addresses and sizes
+{% for r in region_vars %}
+set(NanoSoC_REGION_{{ r.var_name }}_BASE {{ r.base }})
+set(NanoSoC_REGION_{{ r.var_name }}_SIZE {{ r.size }})
+{% endfor %}
+
+# Linker profiles available
+set(NanoSoC_LINKER_PROFILES
+{% for pname in profile_vars.keys() %}
+    {{ pname }}
+{% endfor %}
+)
+
+# Per-profile link bases + generated MEMORY fragment
+{% for pname, pv in profile_vars.items() %}
+set(NanoSoC_PROFILE_{{ pname }}_RO_BASE {{ pv.ro_base }})
+set(NanoSoC_PROFILE_{{ pname }}_RW_BASE {{ pv.rw_base }})
+set(NanoSoC_PROFILE_{{ pname }}_LD_FRAGMENT
+    "${CMAKE_CURRENT_LIST_DIR}/{{ top_name }}_{{ pname }}_memory.ld")
+{% endfor %}
+
+# objcopy --adjust-vma values
+{% for adj_name, adj_val in hex_adjust.items() %}
+set(NanoSoC_HEX_ADJUST_{{ adj_name }} {{ adj_val }})
+{% endfor %}
+
+# ADP upload address
+set(NanoSoC_ADP_UPLOAD_ADDRESS {{ adp_upload_address }})

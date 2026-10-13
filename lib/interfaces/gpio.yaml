@@ -1,0 +1,30 @@
+#-----------------------------------------------------------------------------
+# GPIO Interface Definition
+# Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+# SPDX-License-Identifier: Apache-2.0
+#-----------------------------------------------------------------------------
+# GPIO port interface with input, output, output enable, and alternate
+# function control. Directly maps to cmsdk_ahb_gpio port signals.
+#
+# Parameters:
+#   WIDTH — number of GPIO pins (default 16)
+#
+# Usage:
+#   - interface: !include ../interfaces/gpio.yaml
+#     name: p0
+#     parameters: { WIDTH: 16 }
+#-----------------------------------------------------------------------------
+
+interface:
+  name: gpio
+  description: GPIO port interface
+  protocol: gpio
+
+  parameters:
+    WIDTH: { type: int, default: 16, description: Number of GPIO pins }
+
+  signals:
+    - { name: in,      direction: in,  width: ${WIDTH}, description: GPIO input }
+    - { name: out,     direction: out, width: ${WIDTH}, description: GPIO output }
+    - { name: outen,   direction: out, width: ${WIDTH}, description: GPIO output enable }
+    - { name: altfunc, direction: out, width: ${WIDTH}, description: GPIO alternate function select }

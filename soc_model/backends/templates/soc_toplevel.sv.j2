@@ -1,0 +1,226 @@
+//-----------------------------------------------------------------------------
+// {{ module_name }} — Top-Level Structural Module
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Template:  soc_toplevel.sv.j2
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+// This module is purely structural: most combinational glue logic is expressed
+// as helper module instantiations (soc_glue_*). The only exception is `concat`
+// muxes, which emit a single continuous assign to pack per-bit signals into a
+// multi-bit net.
+//-----------------------------------------------------------------------------
+
+module {{ module_name }} #(
+{% for p in params %}
+{% if p.type == 'str' %}
+    parameter          {{ "%-20s" | format(p.name) }} = "{{ p.default }}"{{ ',' if not loop.last else '' }}  // {{ p.desc }}
+{% elif p.type == 'int' %}
+    parameter          {{ "%-20s" | format(p.name) }} = {{ p.default }}{{ ',' if not loop.last else '' }}  // {{ p.desc }}
+{% else %}
+    parameter          {{ "%-20s" | format(p.name) }} = {{ p.default }}{{ ',' if not loop.last else '' }}  // {{ p.desc }}
+{% endif %}
+{% endfor %}
+) (
+{% for port in ports %}
+{% if port.width_str %}
+    {{ "%-7s" | format(port.direction) }} wire {{ "%-20s" | format(port.width_str) }} {{ port.name }}{{ ',' if not loop.last else '' }}  // {{ port.desc }}
+{% else %}
+    {{ "%-7s" | format(port.direction) }} wire {{ "%-20s" | format('') }} {{ port.name }}{{ ',' if not loop.last else '' }}  // {{ port.desc }}
+{% endif %}
+{% endfor %}
+);
+
+    //=========================================================================
+    // Internal Wires — Shared Nets
+    //=========================================================================
+{% for w in internal_wires %}
+{% if w.width_str %}
+    wire {{ "%-20s" | format(w.width_str) }} {{ w.name }};  // {{ w.desc }}
+{% else %}
+    wire {{ "%-20s" | format('') }} {{ w.name }};  // {{ w.desc }}
+{% endif %}
+{% endfor %}
+
+    //=========================================================================
+    // Internal Wires — AHB Bus Bundles
+    //=========================================================================
+{% for w in bus_wires %}
+    wire {{ "%-20s" | format(w.width_str) }} {{ w.name }};  // {{ w.desc }}
+{% endfor %}
+
+{% if xref_wires %}
+    //=========================================================================
+    // Internal Wires — Cross-Instance Connections
+    //=========================================================================
+{% for w in xref_wires %}
+{% if w.width_str %}
+    wire {{ "%-20s" | format(w.width_str) }} {{ w.name }};  // {{ w.desc }}
+{% else %}
+    wire {{ "%-20s" | format('') }} {{ w.name }};  // {{ w.desc }}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+    //=========================================================================
+    // Glue Logic — Structural Helper Instances
+    //=========================================================================
+{% for gl in glue_instances %}
+
+    // {{ gl.desc }}
+{% if gl.type == 'passthrough' %}
+    soc_glue_passthrough #(
+        .WIDTH({{ gl.width }})
+    ) u_{{ gl.name }} (
+        .in  ({{ gl.input }}),
+        .out ({{ gl.output }})
+    );
+{% elif gl.type == 'or_reduce' %}
+    soc_glue_or_reduce #(
+        .WIDTH({{ gl.width }})
+    ) u_{{ gl.name }} (
+        .in  ({{ gl.input }}),
+        .out ({{ gl.output }})
+    );
+{% elif gl.type == 'or_combine' %}
+    soc_glue_or_combine #(
+        .WIDTH   ({{ gl.width }}),
+        .N_INPUTS({{ gl.n_inputs }})
+    ) u_{{ gl.name }} (
+        .in  ({
+{% for inp in gl.inputs %}
+            {{ inp }}{{ ',' if not loop.last else '' }}
+{% endfor %}
+        }),
+        .out ({{ gl.output }})
+    );
+{% elif gl.type == 'and_gate' %}
+    soc_glue_and_gate #(
+        .WIDTH({{ gl.width }})
+    ) u_{{ gl.name }} (
+        .in_a({{ gl.input_a }}),
+        .in_b({{ gl.input_b }}),
+        .out ({{ gl.output }})
+    );
+{% elif gl.type == 'mux2' %}
+    soc_glue_mux2 #(
+        .WIDTH({{ gl.width }}),
+        .SEL  ({{ gl.select }})
+    ) u_{{ gl.name }} (
+        .in0 ({{ gl.input0 }}),
+        .in1 ({{ gl.input1 }}),
+        .out ({{ gl.output }})
+    );
+{% elif gl.type == 'reset_sync' %}
+    soc_glue_reset_sync #(
+        .STAGES({{ gl.stages }})
+    ) u_{{ gl.name }} (
+        .clk   ({{ gl.clk }}),
+        .arstn ({{ gl.arstn }}),
+        .out   ({{ gl.output }})
+    );
+{% elif gl.type == 'constant' %}
+    soc_glue_constant #(
+        .WIDTH({{ gl.width }}),
+        .VALUE({{ gl.width }}'d{{ gl.value }})
+    ) u_{{ gl.name }} (
+        .out ({{ gl.output }})
+    );
+{% elif gl.type == 'concat' %}
+    assign {{ gl.output }} = { {% for b in gl.bits %}{{ b }}{{ ', ' if not loop.last else '' }}{% endfor %} };  // {{ gl.desc }}
+{% endif %}
+{% endfor %}
+
+    //=========================================================================
+    // Subsystem Instances
+    //=========================================================================
+{% for inst in instances %}
+
+    // --- {{ inst.module_name }} ---
+{% if inst.condition %}
+    generate if ({{ inst.condition }}) begin : gen_{{ inst.instance_name }}
+{% endif %}
+    {{ inst.module_name }}{% if inst.params %} #(
+{% for p in inst.params %}
+        .{{ "%-20s" | format(p.name) }}({{ p.value }}){{ ',' if not loop.last else '' }}
+{% endfor %}
+    ){% endif %} {{ inst.instance_name }} (
+{% for c in inst.connections %}
+{% if c.signal is none %}
+        .{{ "%-24s" | format(c.port) }}( ){{ ',' if not loop.last else '' }}  // {{ c.desc if c.desc else 'unconnected' }}
+{% else %}
+        .{{ "%-24s" | format(c.port) }}({{ c.signal }}){{ ',' if not loop.last else '' }}
+{% endif %}
+{% endfor %}
+    );
+{% if inst.condition %}
+    end endgenerate
+{% endif %}
+{% endfor %}
+
+{% if xref_output_assigns %}
+    //=========================================================================
+    // Boundary Output Drives — outputs whose source connection was rewired
+    // onto a cross-instance xref wire (the wire feeds other consumers; these
+    // assigns keep the top-level output port driven as well)
+    //=========================================================================
+{% for a in xref_output_assigns %}
+    assign {{ a.lhs }} = {{ a.rhs }};  // {{ a.desc }}
+{% endfor %}
+
+{% endif %}
+{% if child_link_gates %}
+    //=========================================================================
+    // Child Subsystem Links — HTRANS qualified by the matrix HSEL
+    // (the child's own matrix ties HSEL high on its passthrough initiator port)
+    //=========================================================================
+{% for g in child_link_gates %}
+    assign {{ g.wire }} = {{ g.value }};  // {{ g.desc }}
+{% endfor %}
+
+{% endif %}
+{% if passthrough_tieoffs %}
+    //=========================================================================
+    // Passthrough Target Default Tie-offs
+    //=========================================================================
+{% for t in passthrough_tieoffs %}
+    assign {{ t.wire }} = {{ t.value }};  // {{ t.desc }}
+{% endfor %}
+{% endif %}
+
+{% if interconnect %}
+    //=========================================================================
+    // Interconnect
+    //=========================================================================
+    {{ interconnect.module_name }}{% if interconnect.params %} #(
+{% for p in interconnect.params %}
+        .{{ "%-14s" | format(p.name) }}({{ p.value }}){{ ',' if not loop.last else '' }}
+{% endfor %}
+    ){% endif %} u_interconnect (
+        // System clocks, resets, and control
+{% for c in interconnect.connections %}
+{% if c.signal is none %}
+        .{{ "%-32s" | format(c.port) }}( ),  // {{ c.desc if c.desc else 'unconnected' }}
+{% else %}
+        .{{ "%-32s" | format(c.port) }}({{ c.signal }}),
+{% endif %}
+{% endfor %}
+
+{% for entry in interconnect.ports %}
+{% if entry.type == 'comment' %}
+        // {{ entry.text }}
+{% elif entry.type == 'port' %}
+{% if entry.signal is none %}
+        .{{ "%-32s" | format(entry.port) }}( ){{ '' if loop.last else ',' }}  // {{ entry.desc if entry.desc else 'unconnected' }}
+{% else %}
+        .{{ "%-32s" | format(entry.port) }}({{ entry.signal }}){{ '' if loop.last else ',' }}
+{% endif %}
+{% endif %}
+{% endfor %}
+    );
+{% endif %}
+
+endmodule

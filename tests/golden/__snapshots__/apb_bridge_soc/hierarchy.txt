@@ -1,0 +1,8 @@
+============================================================
+  apb_bridge_soc — Component Hierarchy
+============================================================
+
+  apb_bridge_soc (top)
+  ├── u_sram_0 : tiny_region [addressable]
+  └── u_apb_periph_0 : tiny_apb_periph [addressable]
+

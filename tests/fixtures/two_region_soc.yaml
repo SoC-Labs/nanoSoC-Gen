@@ -1,0 +1,67 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Fixture SoC with two targets and an initiator that sees both — exercises the
+# address map (two non-overlapping windows) and initiator->target visibility.
+
+module:
+  name: two_region_soc
+  gen: True
+  desc: >
+    Two-region SoC fixture. One AHB-Lite interconnect, one CPU initiator, two
+    SRAM targets at distinct bases. Exercises address-map emission and
+    initiator-target visibility lists.
+
+  params:
+    SYS_CLK_FREQ_HZ: { type: int, default: 50000000, desc: "System clock (50 MHz)" }
+    SYS_ADDR_W:      { type: int, default: 32, desc: "System address width" }
+    SYS_DATA_W:      { type: int, default: 32, desc: "System data width" }
+    SRAM_RAM_ADDR_W: { type: int, default: 12, desc: "SRAM byte-address width (4 KB)" }
+
+  clocks:
+    - { name: sys_hclk, source: external, desc: "AHB clock" }
+
+  resets:
+    - { name: sys_hresetn, active: low, source: external, desc: "AHB reset" }
+
+  interfaces:
+    - { name: sys_hclk,    type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB clock in" }
+    - { name: sys_hresetn, type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB reset in" }
+    - { name: cpu_m, type: ahb, direction: initiator, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W }, desc: "CPU AHB master-out" }
+
+  instances:
+    - instance_name: u_sram_0
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $SRAM_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: two_region_ahb_interconnect.sram_0 }
+
+    - instance_name: u_sram_1
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $SRAM_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: two_region_ahb_interconnect.sram_1 }
+
+  interconnects:
+    - name: two_region_ahb_interconnect
+      gen: True
+      type: ahb_lite
+      desc: "Two-target AHB-Lite interconnect"
+      params:
+        SYS_ADDR_W: $SYS_ADDR_W
+        SYS_DATA_W: $SYS_DATA_W
+      connections:
+        - { port: sys_hclk,    conn: sys_hclk }
+        - { port: sys_hresetn, conn: sys_hresetn }
+      targets:
+        - { name: sram_0, instance: u_sram_0, base: 0x00000000, size: 0x00001000, sw_access: rwx, region_type: memory, phys_size: 0x00001000, desc: "SRAM bank 0" }
+        - { name: sram_1, instance: u_sram_1, base: 0x10000000, size: 0x00001000, sw_access: rwx, region_type: memory, phys_size: 0x00001000, desc: "SRAM bank 1" }
+      initiators:
+        - name: cpu_m
+          targets:
+            - name: sram_0
+            - name: sram_1

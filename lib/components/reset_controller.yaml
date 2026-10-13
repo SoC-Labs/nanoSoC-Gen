@@ -1,0 +1,22 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Droppable component package — per-core reset controller (configurator doc 06a).
+# Grounds:
+# nanosoc-multicore-system/nanosoc_arch_tech/sys_desc/regions/reset_ctrl/nanosoc_reset_ctrl.yaml
+# (module nanosoc_reset_ctrl).
+component:
+  id: reset_controller
+  module: nanosoc_reset_ctrl
+  category: peripheral
+  label: "Reset Controller"
+  desc: "Per-core reset controller: aggregates SYSRESETREQ / lockup / watchdog
+    / software / external reset sources per core, stretches them into N-cycle
+    pulses, latches the reset cause in W1C registers and emits active-low core
+    resets with the CPU boot-gate folded in. Drop in for a multicore SoC."
+  window_size: 4K
+  knobs:
+    # RESET_STRETCH must be at least 1 FCLK cycle for the pulse to be visible;
+    # too long needlessly delays recovery.
+    - { param: RESET_STRETCH, label: "Reset pulse length", kind: int,
+        default: 8, min: 1, max: 32, unit: "cycles",
+        desc: "Active-high reset pulse length in free-running-clock (FCLK)
+          cycles." }

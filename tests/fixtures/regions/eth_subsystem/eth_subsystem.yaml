@@ -1,0 +1,96 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Hermetic fixture subsystem with its OWN internal AHB interconnect, used to
+# exercise the firmware backend's hierarchical stitching + bridge-merge path
+# (_stitch_module lines 281-343).
+#
+# Shape mirrors a CPU subsystem (eth_ss): an internal CPU initiator that sees
+# a local IMEM (with an alias window via visibility) and a remappable BOOTROM,
+# plus a 'sys_exit' passthrough target that routes traffic back out to the
+# parent matrix via the module-level 'sys_m' AHB master. The parent IC's
+# bridge initiator (eth_ss_m) folds in the IMEM/BOOTROM regions this internal
+# CPU carries so a linker profile keyed on eth_ss_m can resolve alias/remapped.
+
+module:
+  name: eth_subsystem
+  gen: True
+  desc: >
+    CPU subsystem with an internal AHB interconnect, a passthrough exit target
+    to the parent matrix, and an internal CPU initiator that carries alias +
+    remap windows for its local IMEM/BOOTROM.
+
+  params:
+    SYS_ADDR_W:        { type: int, default: 32, desc: "System address width" }
+    SYS_DATA_W:        { type: int, default: 32, desc: "System data width" }
+    SS_IMEM_RAM_ADDR_W:    { type: int, default: 16, desc: "Subsystem IMEM width (64 KB)" }
+    SS_BOOTROM_RAM_ADDR_W: { type: int, default: 11, desc: "Subsystem BOOTROM width (2 KB)" }
+
+  interfaces:
+    - { name: HCLK,    type: wire, direction: in, params: { WIDTH: 1 }, desc: AHB clock }
+    - { name: HRESETn, type: wire, direction: in, params: { WIDTH: 1 }, desc: AHB reset (active low) }
+    # Boundary port: the parent matrix bridge initiator (eth_ss_m) drives this
+    # slave-in, and the subsystem's internal exit target also routes back out
+    # through it (it is both the bridge slave-in and the passthrough exit).
+    - { name: eth_ss_m, type: ahb, direction: target, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W, EXCLUDE: [hready] }, desc: "Bridge boundary port to parent matrix" }
+
+  instances:
+    - instance_name: u_ss_imem_0
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $SS_IMEM_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: HCLK }
+        - { port: HRESETn,   conn: HRESETn }
+        - { port: ahb_slave, conn: eth_ss_ahb_interconnect.ss_imem_0 }
+
+    - instance_name: u_ss_bootrom_0
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $SS_BOOTROM_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: HCLK }
+        - { port: HRESETn,   conn: HRESETn }
+        - { port: ahb_slave, conn: eth_ss_ahb_interconnect.ss_bootrom_0 }
+
+  interconnects:
+    - name: eth_ss_ahb_interconnect
+      gen: True
+      type: ahb_lite
+      desc: "Subsystem internal AHB-Lite interconnect"
+      params:
+        SYS_ADDR_W: $SYS_ADDR_W
+        SYS_DATA_W: $SYS_DATA_W
+      connections:
+        - { port: sys_hclk,    conn: HCLK }
+        - { port: sys_hresetn, conn: HRESETn }
+      targets:
+        - { name: ss_imem_0,    instance: u_ss_imem_0,    base: 0x10000000, size: 0x08000000, phys_size: "2 ** $SS_IMEM_RAM_ADDR_W",    sw_access: rwx, region_type: memory, role: None,    desc: "Subsystem IMEM" }
+        - { name: ss_bootrom_0, instance: u_ss_bootrom_0, base: 0x00000000, size: 0x08000000, phys_size: "2 ** $SS_BOOTROM_RAM_ADDR_W", sw_access: rx,  region_type: memory, role: bootrom, desc: "Subsystem BOOTROM" }
+        # Passthrough exit: traffic to the parent matrix leaves via the same
+        # boundary port (eth_ss_m) the parent bridge initiator drives in on.
+        # firmware.py keys the bridge-merge on a child target whose
+        # `passthrough` == that bridge port.
+        - { name: sys_exit, base: 0x20000000, size: 0x10000000, sw_access: rw, region_type: ~, role: ~, passthrough: eth_ss_m, desc: "Exit to parent matrix" }
+      initiators:
+        # Internal CPU initiator: carries an alias window for IMEM and a
+        # remappable BOOTROM (remap bit 0). These are the regions the parent
+        # bridge initiator folds in.
+        - name: ss_cpu_m
+          targets:
+            - name: ss_imem_0
+              visibility:
+                # Canonical IMEM window at 0x10000000.
+                - { base: 0x10000000, aperture: 0x08000000 }
+                # Alias window at 0x00000000 (CPU sees IMEM low after remap-off).
+                - { base: 0x00000000, aperture: 0x08000000, remap_behaviour: alias }
+            - name: ss_bootrom_0
+              visibility:
+                # BOOTROM canonical at 0x00000000 with a remap overlay (bit 0).
+                - { base: 0x00000000, aperture: 0x08000000, remap: { remapping: True, remap_bit: 0, remap_behaviour: alias } }
+            - name: sys_exit
+        # Passthrough initiator: external slave-in from the parent bridge.
+        - name: eth_ss_m
+          passthrough: eth_ss_m
+          targets:
+            - name: ss_imem_0
+            - name: ss_bootrom_0
+            - name: sys_exit

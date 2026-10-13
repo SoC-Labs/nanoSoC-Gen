@@ -1,0 +1,313 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+#
+# Chip-boundary spec for the multicore SoC top.
+#
+# Declares how the generated inner SoC module `nanosoc_multicore_soc`
+# (build_soc/rtl/nanosoc_multicore_soc.sv, 79 ports) is wrapped by the
+# bonded chip `nanosoc_multicore_chip`:
+#   - which inner ports become bonded chip pads (and what pad cell kind),
+#   - which inner inputs are tied to a constant inside the wrapper,
+#   - which inner outputs are left unconnected (open).
+#
+# This is EDITABLE, user-reviewable data. The tie/open defaults below are
+# best-effort (testbench-idle eth slave, deasserted PoR/PMU/NMI/RXEV) and
+# may be revised without touching the wrapper template.
+#
+# Verified port-for-port against build_soc/rtl/nanosoc_multicore_soc.sv
+# (2026-07-09): 39 bonded + 32 tied + 39 open + 4 terminated = 114 ports,
+# no duplicates, nothing unclassified.
+#
+# This is now ENFORCED, not just asserted in a comment: the chip-wrapper and
+# fpga-wrapper backends cross-check this spec against the inner SoC's real port
+# list and RAISE on any unclassified or stale name.  Before that check existed
+# an unclassified port was silently omitted from the `u_soc` instantiation —
+# which is how the 548cbed core rename (cpu_0_* -> network_core_*, cpu_1_*/
+# cpu1_* -> chip_core_*) left this spec broken and unnoticed, and how the 22
+# die-to-die ports vanished the day they were added.
+#
+# Deltas since the original 75-port count:
+#   +4  SPI PL022 master pads (spi_sclk/spi_mosi/spi_ss out, spi_miso in)
+#   +1  chip_core_wdog_reset
+#   +22 die-to-die port (d2d_ahb_m 11 + d2d_ahb_s 11); 4 of them terminated
+#   +12 die-to-die IRQ bus (1) + PHC servo source 0 (11)
+#
+# pad_kind vocabulary
+#   input        : pure-input pad     (consumes 1 inner input  port -> `in`)
+#   output       : pure-output pad    (consumes 1 inner output port -> `out`)
+#   tristate_out : output + OE pad    (consumes out + oe; pad floats when disabled)
+#   bidir        : in/out/oe triplet  (consumes 3 inner ports -> in/out/oe, one pad)
+#
+# Each bonded pad carries:
+#   chip_port : the port name to expose on nanosoc_multicore_chip
+#   pad_kind  : input|output|tristate_out|bidir
+#   width     : pad width in bits (1 = scalar)
+#   in/out/oe : the inner nanosoc_multicore_soc port(s) it connects to,
+#               as required by pad_kind (see vocabulary above)
+#   oe_polarity (tristate_out/bidir only) : active_high | active_low
+#               (the inner oe port's assert sense; the template maps it to
+#                the pad cell's own enable convention)
+#
+# The pad CELL names per technology come from lib/pad_tech/<tech>.yaml
+# (input_cell / bidir_io_cell), NOT from this file. This file is the
+# functional boundary only; it is tech-independent.
+
+chip_boundary:
+  chip_module:  nanosoc_multicore_chip      # generated bonded wrapper
+  inner_module: nanosoc_multicore_soc       # the SoC top being wrapped
+
+  # =====================================================================
+  # BONDED PADS  (39 inner ports -> pads on the chip)
+  # Grouped logically: clk / reset / test / swd / jtag / uart /
+  #                    eth_rmii / eth_mdio / qspi / spi / hostio4 / pps
+  # =====================================================================
+  pads:
+
+    # ---- clocks (3 pure-input clock pads) -----------------------------
+    clk:
+      - { chip_port: sys_fclk,     pad_kind: input, width: 1, in: sys_fclk }      # free-running sys clock
+      - { chip_port: rmii_ref_clk, pad_kind: input, width: 1, in: rmii_ref_clk }  # 50 MHz RMII reference clock
+      - { chip_port: rtc_clk,      pad_kind: input, width: 1, in: rtc_clk }        # 25 MHz PHC/RTC clock (40 ns)
+
+    # ---- reset (1 pure-input, active-low) -----------------------------
+    reset:
+      - { chip_port: sys_sysresetn, pad_kind: input, width: 1, in: sys_sysresetn }  # external system reset (active low)
+
+    # ---- test / scan (2 pure-input pads) ------------------------------
+    test:
+      - { chip_port: sys_scanenable, pad_kind: input, width: 1, in: sys_scanenable }  # scan enable (shared)
+      - { chip_port: sys_testmode,   pad_kind: input, width: 1, in: sys_testmode }    # test mode (shared)
+
+    # ---- serial-wire debug (1 input clk + 1 bidir data) ---------------
+    swd:
+      - { chip_port: dap_swclktck, pad_kind: input, width: 1, in: dap_swclktck }  # SWCLK / TCK
+      - chip_port: swdio                  # bonded SWDIO data pad
+        pad_kind: bidir
+        width:    1
+        in:       dap_swditms             # pad -> core (SWDIO_in / TMS)
+        out:      dap_swdo                # core -> pad (SWDIO_out)
+        oe:       dap_swdoen             # output enable (active high)
+        oe_polarity: active_high
+
+    # ---- JTAG (1 input TDI + 1 input TRSTn + 1 tristate TDO) ----------
+    jtag:
+      - { chip_port: jtag_tdi,   pad_kind: input, width: 1, in: dap_tdi }    # JTAG TDI
+      - { chip_port: jtag_ntrst, pad_kind: input, width: 1, in: dap_ntrst }  # JTAG TRSTn (active low)
+      - chip_port: jtag_tdo                # tristate output (no input back into core)
+        pad_kind: tristate_out
+        width:    1
+        out:      dap_tdo                  # JTAG TDO
+        oe:       dap_ntdoen              # TDO output enable, ACTIVE LOW
+        oe_polarity: active_low
+
+    # ---- UART (CPU0 + CPU1: 2 in pads, 2 out pads) --------------------
+    uart:
+      - { chip_port: uart_rxd,      pad_kind: input,  width: 1, in:  uart_rxd }       # CPU0 UART RXD
+      - { chip_port: uart_txd,      pad_kind: output, width: 1, out: uart_txd }       # CPU0 UART TXD
+      # `chip_port` is the BOARD-facing pad name (referenced by lib/pin_map/) and
+      # is deliberately left alone; `in:`/`out:` are inner SoC ports, renamed by
+      # 548cbed (cpu_0_* -> network_core_*, cpu_1_*/cpu1_* -> chip_core_*).
+      - { chip_port: cpu1_uart_rxd, pad_kind: input,  width: 1, in:  chip_core_uart_rxd }  # CPU1 UART RXD
+      - { chip_port: cpu1_uart_txd, pad_kind: output, width: 1, out: chip_core_uart_txd }  # CPU1 UART TXD
+
+    # ---- ethernet RMII (2-bit TX bus + tx_en out; 2-bit RX bus + crs_dv in)
+    eth_rmii:
+      - { chip_port: rmii_txd,    pad_kind: output, width: 2, out: rmii_txd }     # RMII TX data [1:0]
+      - { chip_port: rmii_tx_en,  pad_kind: output, width: 1, out: rmii_tx_en }   # RMII TX enable
+      - { chip_port: rmii_rxd,    pad_kind: input,  width: 2, in:  rmii_rxd }     # RMII RX data [1:0]
+      - { chip_port: rmii_crs_dv, pad_kind: input,  width: 1, in:  rmii_crs_dv }  # RMII carrier-sense / data-valid
+
+    # ---- ethernet MDIO (1 out MDC + 1 bidir MDIO) ---------------------
+    eth_mdio:
+      - { chip_port: mdc, pad_kind: output, width: 1, out: mdc_pad_o }  # MDIO clock out
+      - chip_port: mdio                    # bonded MDIO data pad
+        pad_kind: bidir
+        width:    1
+        in:       md_pad_i                 # pad -> core
+        out:      md_pad_o                # core -> pad
+        oe:       md_padoe_o             # output enable (active high)
+        oe_polarity: active_high
+
+    # ---- QSPI flash (sclk out, csn out, io[3:0] bidir bus) ------------
+    qspi:
+      - { chip_port: qspi_sclk, pad_kind: output, width: 1, out: qspi_sclk }  # QSPI clock
+      - { chip_port: qspi_csn,  pad_kind: output, width: 1, out: qspi_csn }   # QSPI chip-select (active low)
+      - chip_port: qspi_io                 # 4-bit bidir data bus -> 4 bidir pads
+        pad_kind: bidir
+        width:    4
+        in:       qspi_io_i                # pad -> core [3:0]
+        out:      qspi_io_o               # core -> pad [3:0]
+        oe:       qspi_io_e              # per-bit output enable [3:0] (active high)
+        oe_polarity: active_high
+
+    # ---- SPI master (PL022): sclk/mosi/ss outputs, miso input ---------
+    # SPI master, so sclk/mosi are driven out, miso is sampled in, and the
+    # 3 chip-selects (spi_ss[2:0]) are direct outputs -> 3 physical pads.
+    # No tristate needed (a master owns the bus); plain output/input pads.
+    spi:
+      - { chip_port: spi_sclk, pad_kind: output, width: 1, out: spi_sclk }  # SPI serial clock
+      - { chip_port: spi_mosi, pad_kind: output, width: 1, out: spi_mosi }  # SPI master-out slave-in
+      - { chip_port: spi_miso, pad_kind: input,  width: 1, in:  spi_miso }  # SPI master-in slave-out
+      - { chip_port: spi_ss,   pad_kind: output, width: 3, out: spi_ss }    # 3 chip-selects [2:0]
+
+    # ---- HOSTIO4 P1 (7-bit bidir bus) ---------------------------------
+    hostio4:
+      - chip_port: hostio4                 # 7-bit bidir bus -> 7 bidir pads
+        pad_kind: bidir
+        width:    7
+        in:       hostio4_p1_in            # host -> SoC [6:0]
+        out:      hostio4_p1_out          # SoC -> host [6:0]
+        oe:       hostio4_p1_outen      # per-bit output enable [6:0] (active high)
+        oe_polarity: active_high
+
+    # ---- PPS (1 pure-output pad) --------------------------------------
+    pps:
+      - { chip_port: phc_pps_out, pad_kind: output, width: 1, out: phc_pps_out }  # PHC pulse-per-second out
+
+  # =====================================================================
+  # TIED INPUTS  (17 inner inputs driven to a constant inside the wrapper,
+  #               NOT bonded). Reviewable defaults.
+  # =====================================================================
+  ties:
+    # --- core/debug straps ---
+    - { soc_port: sys_sysresetreq, const: "1'b0" }   # no external reset request
+    - { soc_port: dap_npotrst,     const: "1'b1" }   # SWJ-DP PoR deasserted (active low)
+    - { soc_port: dap_swj_enable,  const: "1'b1" }   # enable SWD on this chiplet
+    - { soc_port: network_core_pmuenable, const: "1'b0" }   # CPU0 PMU disabled
+    - { soc_port: chip_core_pmuenable,    const: "1'b0" }   # CPU1 PMU disabled
+    - { soc_port: network_core_nmi,       const: "1'b0" }   # CPU0 NMI inactive
+    - { soc_port: chip_core_nmi,          const: "1'b0" }   # CPU1 NMI inactive
+    - { soc_port: network_core_rxev,      const: "1'b0" }   # CPU0 external event inactive
+    - { soc_port: chip_core_rxev,         const: "1'b0" }   # CPU1 external event inactive
+    # --- eth_ss_0 external-AHB testbench slave: idle ---
+    - { soc_port: eth_ss_0_htrans,   const: "2'b00" }            # IDLE transfer
+    # haddr/hwdata are SYS_ADDR_W/SYS_DATA_W wide (both 32 by default). The
+    # chip wrapper has NO access to the inner SoC's parameters, so the tie
+    # constant must be self-contained — sized literals, not inner-param
+    # replication ({SYS_ADDR_W{1'b0}} would not elaborate in this scope).
+    - { soc_port: eth_ss_0_haddr,    const: "32'd0" }            # SYS_ADDR_W = 32
+    - { soc_port: eth_ss_0_hwrite,   const: "1'b0" }
+    - { soc_port: eth_ss_0_hsize,    const: "3'b000" }
+    - { soc_port: eth_ss_0_hburst,   const: "3'b000" }
+    - { soc_port: eth_ss_0_hprot,    const: "4'b0000" }
+    - { soc_port: eth_ss_0_hwdata,   const: "32'd0" }            # SYS_DATA_W = 32
+    - { soc_port: eth_ss_0_hmastlock, const: "1'b0" }
+
+    # --- d2d_ahb_s: die-to-die INBOUND port, no remote die on this chip ---
+    # This port feeds a top-matrix initiator, so a floating HTRANS would X-prop
+    # into the shared-SRAM / IPC arbiters. Held permanently IDLE.
+    - { soc_port: d2d_ahb_s_htrans,    const: "2'b00" }          # IDLE transfer
+    - { soc_port: d2d_ahb_s_haddr,     const: "32'd0" }          # SYS_ADDR_W = 32
+    - { soc_port: d2d_ahb_s_hwrite,    const: "1'b0" }
+    - { soc_port: d2d_ahb_s_hsize,     const: "3'b010" }
+    - { soc_port: d2d_ahb_s_hburst,    const: "3'b000" }
+    - { soc_port: d2d_ahb_s_hprot,     const: "4'b0000" }
+    - { soc_port: d2d_ahb_s_hwdata,    const: "32'd0" }          # SYS_DATA_W = 32
+    - { soc_port: d2d_ahb_s_hmastlock, const: "1'b0" }
+
+    # --- d2d_irq: no link on this chip, so no link interrupts ---
+    - { soc_port: d2d_irq,             const: "16'd0" }
+
+    # --- d2d PHC servo source 0: no remote die to discipline our clock ---
+    # SERVO_CTRL[0] = SRC_SEL resets to 0 (external / D2D). With these inputs
+    # inactive the PHC free-runs — exactly what the constants they replaced did.
+    # Firmware selects the ethernet HA1588 servo by writing SRC_SEL = 1.
+    - { soc_port: d2d_phc_hw_capture,          const: "1'b0" }
+    - { soc_port: d2d_phc_hw_set_time,         const: "1'b0" }
+    - { soc_port: d2d_phc_hw_set_seconds,      const: "48'd0" }
+    - { soc_port: d2d_phc_hw_set_nanoseconds,  const: "30'd0" }
+    - { soc_port: d2d_phc_hw_adj_valid,        const: "1'b0" }
+    - { soc_port: d2d_phc_hw_adj_ns_incr_frac, const: "32'd0" }   # SYS_DATA_W = 32
+
+  # =====================================================================
+  # TERMINATORS — inner bus ports that need a RESPONDER, not a constant.
+  # =====================================================================
+  # The d2d_ahb_m port carries the 0x2E000000..0x2FFFFFFF die-to-die window off
+  # the SoC. On this monolithic chip nothing is attached to it.
+  #
+  # It cannot be tied: `hready=1, hresp=0` would make a 32 MB window read as
+  # zero and swallow writes. Before the D2D port existed that region was an
+  # unmapped hole raising a clean AHB ERROR from the top-level default slave,
+  # and `firmware/apps/default_slave_error_walk` (HW sentinel default_slave_walk)
+  # asserts it faults. It cannot be left open either — synthesis ties an
+  # unconnected `hready` low and the bus matrix hangs on the first access.
+  #
+  # nanosoc_d2d_idle_slave answers with a proper two-cycle AHB-Lite ERROR.
+  # A CHIPLET boundary spec bonds these ports to D2D bumps instead.
+  terminators:
+    - module: nanosoc_d2d_idle_slave
+      instance: u_d2d_idle_slave
+      desc: "D2D outbound window (0x2E000000..0x2FFFFFFF) — no link on this chip; answer AHB ERROR."
+      params: { DATA_W: 32 }
+      # Wires named after the inner SoC port.
+      soc_ports:
+        htrans: d2d_ahb_m_htrans
+        hrdata: d2d_ahb_m_hrdata
+        hready: d2d_ahb_m_hready
+        hresp:  d2d_ahb_m_hresp
+      # Wire widths, declared here for the same reason `pads` declare `width`:
+      # the wrapper does not instantiate the inner SoC's parameters, so it
+      # cannot write `wire [SYS_DATA_W-1:0]`. Omitted entries are 1 bit. These
+      # are cross-checked against the SoC model whenever it is available.
+      widths:
+        d2d_ahb_m_htrans: 2
+        d2d_ahb_m_hrdata: 32     # SYS_DATA_W
+      # Nets the wrapper already has for these bonded inner ports. sys_hclk is a
+      # passthrough of sys_fclk, so the D2D bus lives in that domain.
+      bonded_refs:
+        hclk:    sys_fclk
+        hresetn: sys_sysresetn
+
+  # =====================================================================
+  # OPEN OUTPUTS  (inner outputs not bonded -> left unconnected).
+  # Reviewable defaults.
+  # =====================================================================
+  opens:
+    # --- system reset/clock observation outputs ---
+    - sys_poresetn
+    - sys_hclk
+    - sys_hresetn
+    # --- CPU0 (network_core) status outputs ---
+    - network_core_txev
+    - network_core_lockup
+    - network_core_sysresetreq
+    - network_core_sleeping
+    - network_core_sleepdeep
+    # --- CPU1 (chip_core) status outputs ---
+    - chip_core_txev
+    - chip_core_lockup
+    - chip_core_sysresetreq
+    - chip_core_sleeping
+    - chip_core_sleepdeep
+    - chip_core_wdog_reset
+    # --- d2d_ahb_m address-phase outputs: consumed only by the terminator's
+    # HTRANS input (see `terminators:`), so the rest go nowhere on this chip.
+    - d2d_ahb_m_haddr
+    - d2d_ahb_m_hwrite
+    - d2d_ahb_m_hsize
+    - d2d_ahb_m_hburst
+    - d2d_ahb_m_hprot
+    - d2d_ahb_m_hwdata
+    - d2d_ahb_m_hmastlock
+    # --- d2d_ahb_s responses: no remote die is listening ---
+    - d2d_ahb_s_hrdata
+    - d2d_ahb_s_hready
+    - d2d_ahb_s_hresp
+    # --- d2d PHC servo-0 exports: no D2D servo attached on this chip ---
+    - d2d_phc_seconds
+    - d2d_phc_nanoseconds
+    - d2d_phc_hw_cap_seconds
+    - d2d_phc_hw_cap_nanoseconds
+    - d2d_phc_hw_cap_sub_nanoseconds
+    # --- RTC / PTP telemetry outputs ---
+    - rtc_time_ptp_ns        # [31:0]
+    - rtc_time_ptp_sec       # [47:0]
+    - rtc_time_one_pps
+    - ha1588_servo_locked    # HA1588->PHC hardware-servo lock status (FPGA taps it to a LED)
+    # --- interrupt observation outputs ---
+    - eth_irq
+    - phc_pps_irq
+    - phc_alarm_irq
+    # --- eth_ss_0 external-AHB testbench slave response ---
+    - eth_ss_0_hrdata        # [SYS_DATA_W-1:0]
+    - eth_ss_0_hready
+    - eth_ss_0_hresp

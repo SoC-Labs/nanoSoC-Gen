@@ -1,0 +1,38 @@
+//-----------------------------------------------------------------------------
+// AHB Interconnect IP Filelist (impl: cmsdk_mux)
+// Written by SoC Labs. Lists SoC Labs files only; the Cortex-M0 Quickstart
+// components the core instantiates are named below and in
+// cmsdk_mux_components.flist, referenced by path and never copied.
+//
+// Copyright (C) 2026, SoC Labs (www.soclabs.org)
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Source:    soc_model (cmsdk_mux_ahb_interconnect)
+// Template:  ahb_interconnect_cmsdk_mux.flist.j2
+// Generated: 2026-09-26 18:02:52
+//-----------------------------------------------------------------------------
+
+// ============= Verilog library extensions ===========
++libext+.v+.vlib+.sv
+
+// =============    Packages (must precede modules that import them)    =============
+// Discovery table package + module
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/cmsdk_mux_ahb_interconnect_discovery/cmsdk_mux_ahb_interconnect_discovery_pkg.sv
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/cmsdk_mux_ahb_interconnect_discovery/cmsdk_mux_ahb_interconnect_discovery.sv
+// Interconnect configuration package
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/cmsdk_mux_ahb_interconnect/cmsdk_mux_config_pkg.sv
+
+// =============    AHB Interconnect Wrapper    =============
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/cmsdk_mux_ahb_interconnect/cmsdk_mux_interconnect.sv
+
+// =============    AHB Interconnect core (SoC Labs, impl: cmsdk_mux)    =============
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/cmsdk_mux_ahb_interconnect/cmsdk_mux_ahb_interconnect_lite.v
+
+// =============    Arm Quickstart components    =============
+// cmsdk_mux_ahb_interconnect_lite instantiates these three, which are NOT listed here: a
+// SoC must compile each exactly once, and two cmsdk_mux interconnects would
+// otherwise list them twice. Include cmsdk_mux_components.flist once per SoC,
+// or list whichever your flow does not already carry:
+//   $(ARM_CORSTONE_101_DIR)/cmsdk_ahb_master_mux/verilog/cmsdk_ahb_master_mux.v
+//   $(ARM_CORSTONE_101_DIR)/cmsdk_ahb_slave_mux/verilog/cmsdk_ahb_slave_mux.v
+//   $(ARM_CORSTONE_101_DIR)/cmsdk_ahb_default_slave/verilog/cmsdk_ahb_default_slave.v

@@ -1,0 +1,116 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Fixture SoC exercising the firmware backend: a firmware: section with
+# linker_profiles + build_info. IMEM/DMEM/BOOTROM memory targets all use
+# address_select: default (canonical base from the interconnect target), so
+# the linker MEMORY blocks resolve without any remap/alias windows.
+
+module:
+  name: firmware_soc
+  gen: True
+  desc: >
+    Firmware SoC fixture. Three memory targets (bootrom / imem / dmem) on one
+    AHB-Lite interconnect, a cpu_m initiator, and a firmware section with two
+    linker profiles plus a build_info block.
+
+  params:
+    SYS_CLK_FREQ_HZ:   { type: int, default: 25000000, desc: "System clock (25 MHz)" }
+    SYS_ADDR_W:        { type: int, default: 32, desc: "System address width" }
+    SYS_DATA_W:        { type: int, default: 32, desc: "System data width" }
+    BOOTROM_RAM_ADDR_W: { type: int, default: 12, desc: "Bootrom byte-address width (4 KB)" }
+    IMEM_RAM_ADDR_W:   { type: int, default: 14, desc: "IMEM byte-address width (16 KB)" }
+    DMEM_RAM_ADDR_W:   { type: int, default: 14, desc: "DMEM byte-address width (16 KB)" }
+
+  clocks:
+    - { name: sys_hclk, source: external, desc: "AHB clock" }
+
+  resets:
+    - { name: sys_hresetn, active: low, source: external, desc: "AHB reset" }
+
+  interfaces:
+    - { name: sys_hclk,    type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB clock in" }
+    - { name: sys_hresetn, type: wire, direction: in, params: { WIDTH: 1 }, desc: "AHB reset in" }
+    - { name: cpu_m, type: ahb, direction: initiator, params: { ADDR_WIDTH: $SYS_ADDR_W, DATA_WIDTH: $SYS_DATA_W }, desc: "CPU AHB master-out" }
+
+  instances:
+    - instance_name: u_bootrom_0
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $BOOTROM_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: firmware_ahb_interconnect.bootrom_0 }
+
+    - instance_name: u_imem_0
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $IMEM_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: firmware_ahb_interconnect.imem_0 }
+
+    - instance_name: u_dmem_0
+      module: tiny_region
+      addressable: True
+      params: { SYS_ADDR_W: $SYS_ADDR_W, SYS_DATA_W: $SYS_DATA_W, RAM_ADDR_W: $DMEM_RAM_ADDR_W }
+      connections:
+        - { port: HCLK,      conn: sys_hclk }
+        - { port: HRESETn,   conn: sys_hresetn }
+        - { port: ahb_slave, conn: firmware_ahb_interconnect.dmem_0 }
+
+  interconnects:
+    - name: firmware_ahb_interconnect
+      gen: True
+      type: ahb_lite
+      desc: "AHB-Lite interconnect with bootrom / imem / dmem"
+      params:
+        SYS_ADDR_W: $SYS_ADDR_W
+        SYS_DATA_W: $SYS_DATA_W
+      connections:
+        - { port: sys_hclk,    conn: sys_hclk }
+        - { port: sys_hresetn, conn: sys_hresetn }
+      targets:
+        - { name: bootrom_0, instance: u_bootrom_0, base: 0x00000000, size: 0x08000000, phys_size: "2 ** $BOOTROM_RAM_ADDR_W", sw_access: rx,  region_type: memory, role: bootrom, desc: "Boot ROM" }
+        - { name: imem_0,    instance: u_imem_0,    base: 0x10000000, size: 0x08000000, phys_size: "2 ** $IMEM_RAM_ADDR_W",    sw_access: rwx, region_type: memory, role: None,    desc: "Instruction memory" }
+        - { name: dmem_0,    instance: u_dmem_0,    base: 0x18000000, size: 0x08000000, phys_size: "2 ** $DMEM_RAM_ADDR_W",    sw_access: rwx, region_type: memory, role: None,    desc: "Data memory" }
+      initiators:
+        - name: cpu_m
+          targets:
+            - name: bootrom_0
+            - name: imem_0
+            - name: dmem_0
+
+  # =============================================================================
+  # Firmware Configuration
+  # =============================================================================
+  firmware:
+    cpu: cortex-m0
+    cpu_initiator: cpu_m
+
+    linker_profiles:
+      # Application image in IMEM, stack reserved at top of DMEM.
+      - name: app_imem
+        regions:
+          - { target: imem_0, address_select: default }
+          - { target: dmem_0, address_select: default, size_adjust: -0x400 }
+
+      # Bootloader resident in BOOTROM.
+      - name: stage0_bootrom
+        regions:
+          - { target: bootrom_0, address_select: default }
+          - { target: dmem_0,    address_select: default, size_adjust: -0x400 }
+
+    adp:
+      upload_target: imem_0
+      address_select: default
+
+  # =============================================================================
+  # Build Info
+  # =============================================================================
+  build_info:
+    apb_slot: 3
+    gen: True
+    fields:
+      - { name: BUILD_ID,    type: int32,  value: 1,    desc: "Build identifier" }
+      - { name: SOC_NAME,    type: string, value: "FW", max_length: 4, desc: "SoC short name" }

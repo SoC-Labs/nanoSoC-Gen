@@ -1,0 +1,32 @@
+/*
+ * Auto-generated linker MEMORY block for {{ profile_name }}
+ * Source:    {{ source_yaml }}
+ * Generated: {{ generated_date }}
+ *
+ * DO NOT EDIT — regenerate with gen_firmware_config.py
+ */
+
+MEMORY
+{
+{% for r in regions %}
+  {{ "%-10s" | format(r.name) }} ({{ r.attrs }}) : ORIGIN = {{ r.origin }}, LENGTH = {{ r.length }}  /* {{ r.comment }} */
+{% endfor %}
+}
+
+{% set ns = namespace(flash=None, ram=None) -%}
+{% for r in regions -%}
+{# FLASH = first read-only region, or first region if all are writable #}
+{% if ns.flash is none and 'w' not in r.attrs %}{% set ns.flash = r.name %}{% endif -%}
+{# RAM = last writable region (so data/stack go to the final memory) #}
+{% if 'w' in r.attrs %}{% set ns.ram = r.name %}{% endif -%}
+{% endfor -%}
+{# If no read-only region, use the first region as FLASH (load-to-RAM execution) #}
+{% if ns.flash is none and regions %}{% set ns.flash = regions[0].name %}{% endif -%}
+{# If only one region, RAM = FLASH #}
+{% if ns.ram is none and ns.flash %}{% set ns.ram = ns.flash %}{% endif -%}
+/* Aliases so sections.ld / sections_bootloader.ld can use generic region names */
+{% if ns.flash %}REGION_ALIAS("FLASH",   {{ ns.flash }});
+REGION_ALIAS("BOOTROM", {{ ns.flash }});
+{% endif -%}
+{% if ns.ram   %}REGION_ALIAS("RAM",     {{ ns.ram }});
+{% endif %}

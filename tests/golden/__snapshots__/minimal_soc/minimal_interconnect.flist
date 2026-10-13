@@ -1,0 +1,43 @@
+//-----------------------------------------------------------------------------
+// AHB Interconnect IP Filelist
+//
+// Contributors
+//
+// David Mapstone (d.a.mapstone@soton.ac.uk)
+//
+// Copyright 2021-2026 SoC Labs (www.soclabs.org), University of Southampton
+// SPDX-License-Identifier: Apache-2.0
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Source:    soc_model (minimal_ahb_interconnect)
+// Template:  ahb_interconnect.sv.j2
+// Generated: 2026-06-16 14:55:42
+//-----------------------------------------------------------------------------
+
+// ============= Verilog library extensions ===========
++libext+.v+.vlib+.sv
+
+// =============    Packages (must precede modules that import them)    =============
+// Discovery table package + module
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/minimal_ahb_interconnect_discovery/minimal_ahb_interconnect_discovery_pkg.sv
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/minimal_ahb_interconnect_discovery/minimal_ahb_interconnect_discovery.sv
+// Interconnect configuration package
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/minimal_ahb_interconnect/minimal_config_pkg.sv
+
+// =============    AHB Interconnect Wrapper    =============
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/minimal_ahb_interconnect/minimal_interconnect.sv
+
+// =============    AHB BusMatrix IP - Arbiters (one per target)    =============
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/minimal_ahb_interconnect/minimal_ahb_interconnect/minimal_arbiter_SRAM_0.v
+
+// =============    AHB BusMatrix IP - Fixed files    =============
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/minimal_ahb_interconnect/minimal_ahb_interconnect/minimal_ahb_interconnect_default_slave.v
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/minimal_ahb_interconnect/minimal_ahb_interconnect/minimal_ahb_interconnect_lite.v
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/minimal_ahb_interconnect/minimal_ahb_interconnect/minimal_ahb_interconnect.v
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/minimal_ahb_interconnect/minimal_ahb_interconnect/minimal_inititator_input.v
+
+// =============    AHB BusMatrix IP - Matrix Decoders (one per initiator)    =============
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/minimal_ahb_interconnect/minimal_ahb_interconnect/minimal_matrix_decode_CPU_M.v
+
+// =============    AHB BusMatrix IP - Target Outputs (one per target)    =============
+$(SOCLABS_NANOSOC_SOC_DIR)/build_soc/rtl/minimal_ahb_interconnect/minimal_ahb_interconnect/minimal_target_output_SRAM_0.v

@@ -1,0 +1,12 @@
+# AHB2 Bus Matrix interconnect type definition.
+# Referenced by interconnect YAML files via the 'type:' key.
+# Defines architectural parameters for all instances of this type.
+# Module names are derived automatically by gen_ahb_interconnect_xml.py.
+
+interface:
+  name:                  ahb_lite
+  architecture_version:  ahb2
+  arbitration_scheme:    burst
+  routing_data_width:    32
+  routing_address_width: 32
+  user_signal_width:     0

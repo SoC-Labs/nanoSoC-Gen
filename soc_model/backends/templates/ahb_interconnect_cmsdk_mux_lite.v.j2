@@ -1,0 +1,319 @@
+`timescale 1ns/1ps
+//-----------------------------------------------------------------------------
+// {{ module_name }} -- AHB-Lite interconnect core, impl: cmsdk_mux
+//
+// Written by SoC Labs. Contains no Arm source. It instantiates three Arm
+// Cortex-M0 Quickstart (Corstone-101) components, referenced by path through
+// $(ARM_CORSTONE_101_DIR) in the interconnect filelist and never copied:
+// cmsdk_ahb_master_mux, cmsdk_ahb_slave_mux, cmsdk_ahb_default_slave.
+//
+// Drop-in for the BuildBusMatrix-generated {{ module_name }}: identical
+// module name and port list.
+//
+// Copyright (C) 2026, SoC Labs (www.soclabs.org)
+//-----------------------------------------------------------------------------
+// AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY.
+// Source:    {{ source_yaml }}
+// Template:  {{ template_name }}
+// Generated: {{ generated_date }}
+//-----------------------------------------------------------------------------
+// Topology
+//   Shared bus: {% for i in top_ports %}{{ i.up }} -> S{{ i.port }}{{ ', ' if not loop.last else '' }}{% endfor %}{% if cascade %}, cascade -> S2 ({% for i in casc_ports %}{{ i.up }} -> S{{ i.port }}{{ ', ' if not loop.last else '' }}{% endfor %}){% endif %}
+
+//     of u_master_mux (S0/S1 round-robin, S2 high priority)
+//     -> decoder{% if keyed %} (keyed by address-phase HMASTER){% endif %} -> u_slave_mux -> {% for t in slave_ports %}{{ t }}{{ ', ' if not loop.last else '' }}{% endfor %}
+
+{% for i in initiators if i.front %}
+//   Private path: {{ i.up }} -> {% for t in i.private %}{{ t }}{{ ', ' if not loop.last else '' }}{% endfor %} (passthrough; never holds the shared bus)
+//     {{ i.up }}'s HMASTLOCK reaches the shared master mux except while {{ i.up }} drives
+//     a NONSEQ/SEQ to the private path: a locked transfer there must not lock
+//     the shared bus, or it recreates the deadlock the private path breaks.
+//     An IDLE/BUSY inside a locked sequence keeps the lock whatever its
+//     (don't-care) HADDR decodes to, so the sequence stays atomic.
+{% endfor %}
+//   Each target sees the bus as a matrix port would: HSEL is a pure address
+//   decode and HREADYMUX is its own view (low only in its own waited data
+//   phase). HTRANS shows the bus transfer when it is addressed to the target
+//   and either the bus is ready or the target is itself in the data phase
+//   (then its HREADYMUX IS the bus HREADY, so a waited NONSEQ/SEQ/BUSY stays
+//   visible, as AHB requires). While ANOTHER target stalls the bus the target
+//   is shown IDLE: its HREADYMUX is high then, and it must not take a
+//   transfer the bus has not accepted.
+// Decoder: HADDR[31:{{ dec_lsb }}], from the effective address maps for
+// {% for c in configs %}{{ c }}{{ '; ' if not loop.last else '' }}{% endfor %}.
+//-----------------------------------------------------------------------------
+
+module {{ module_name }} (
+    // Common AHB signals
+    input  wire        HCLK,
+    input  wire        HRESETn,
+
+    // System address remap control
+    input  wire  [3:0] REMAP,
+{% for i in initiators %}
+
+    // Initiator port {{ i.up }}
+    input  wire [31:0] HADDR_{{ i.up }},
+    input  wire  [1:0] HTRANS_{{ i.up }},
+    input  wire        HWRITE_{{ i.up }},
+    input  wire  [2:0] HSIZE_{{ i.up }},
+    input  wire  [2:0] HBURST_{{ i.up }},
+    input  wire  [3:0] HPROT_{{ i.up }},
+    input  wire [{{ data_width - 1 }}:0] HWDATA_{{ i.up }},
+    input  wire        HMASTLOCK_{{ i.up }},
+    output wire [{{ data_width - 1 }}:0] HRDATA_{{ i.up }},
+    output wire        HREADY_{{ i.up }},
+    output wire        HRESP_{{ i.up }},
+{% endfor %}
+{% for t in targets %}
+
+    // Target port {{ t.up }}
+    input  wire [{{ data_width - 1 }}:0] HRDATA_{{ t.up }},
+    input  wire        HREADYOUT_{{ t.up }},
+    input  wire        HRESP_{{ t.up }},
+    output wire        HSEL_{{ t.up }},
+    output wire [31:0] HADDR_{{ t.up }},
+    output wire  [1:0] HTRANS_{{ t.up }},
+    output wire        HWRITE_{{ t.up }},
+    output wire  [2:0] HSIZE_{{ t.up }},
+    output wire  [2:0] HBURST_{{ t.up }},
+    output wire  [3:0] HPROT_{{ t.up }},
+    output wire [{{ data_width - 1 }}:0] HWDATA_{{ t.up }},
+    output wire        HMASTLOCK_{{ t.up }},
+    output wire        HREADYMUX_{{ t.up }},
+{% endfor %}
+
+    // Scan ports: this core has no flops on a scan chain (SCANOUTHCLK = SCANINHCLK)
+    input  wire        SCANENABLE,
+    input  wire        SCANINHCLK,
+    output wire        SCANOUTHCLK
+);
+
+  localparam [1:0] TRN_IDLE = 2'b00;
+{% for i in initiators %}
+
+  // ---------------------------------------------------------------------------
+  // Initiator {{ i.up }}: shared-bus port {{ 'u_master_mux_casc' if i.mux == 'casc' else 'u_master_mux' }}.S{{ i.port }}
+  // ---------------------------------------------------------------------------
+  wire                  s_{{ i.up }}_hreadyout;   // from the master mux
+  wire                  s_{{ i.up }}_hresp;
+  wire [{{ data_width - 1 }}:0] s_{{ i.up }}_hrdata;
+{% if i.front %}
+  // Front end: private passthrough target(s) split off before the shared bus
+  wire [{{ dec_w - 1 }}:0] fe_{{ i.up }}_dec_a = HADDR_{{ i.up }}[31:{{ dec_lsb }}];
+{% for t in i.private %}
+  wire fe_{{ i.up }}_sel_{{ t }} =
+      {{ i.front_exprs[t] }};
+{% endfor %}
+  wire fe_{{ i.up }}_sel_shared = ~({% for t in i.private %}fe_{{ i.up }}_sel_{{ t }}{{ ' | ' if not loop.last else '' }}{% endfor %});
+  wire fe_{{ i.up }}_hready;                  // this initiator's HREADY
+
+  cmsdk_ahb_slave_mux #(
+{% for p in range(10) %}
+    .PORT{{ p }}_ENABLE({{ 1 if p <= i.private | length else 0 }}),
+{% endfor %}
+    .DW({{ data_width }})
+  ) u_fe_{{ i.name }}_slave_mux (
+    .HCLK(HCLK), .HRESETn(HRESETn), .HREADY(fe_{{ i.up }}_hready),
+    .HSEL0(fe_{{ i.up }}_sel_shared), .HREADYOUT0(s_{{ i.up }}_hreadyout), .HRESP0(s_{{ i.up }}_hresp), .HRDATA0(s_{{ i.up }}_hrdata),
+{% for p in range(1, 10) %}
+{% if p <= i.private | length %}
+{% set t = i.private[p - 1] %}
+    .HSEL{{ p }}(fe_{{ i.up }}_sel_{{ t }}), .HREADYOUT{{ p }}(HREADYOUT_{{ t }}), .HRESP{{ p }}(HRESP_{{ t }}), .HRDATA{{ p }}(HRDATA_{{ t }}),
+{% else %}
+    .HSEL{{ p }}(1'b0), .HREADYOUT{{ p }}(1'b1), .HRESP{{ p }}(1'b0), .HRDATA{{ p }}({{ data_width }}'h0),
+{% endif %}
+{% endfor %}
+    .HREADYOUT(fe_{{ i.up }}_hready), .HRESP(HRESP_{{ i.up }}), .HRDATA(HRDATA_{{ i.up }})
+  );
+  assign HREADY_{{ i.up }} = fe_{{ i.up }}_hready;
+{% for t in i.private %}
+
+  // Private target {{ t }}: driven straight from {{ i.up }}
+  reg    fe_{{ i.up }}_dp_{{ t }};               // {{ t }} is in its data phase
+  always @(posedge HCLK or negedge HRESETn)
+    if (!HRESETn)                fe_{{ i.up }}_dp_{{ t }} <= 1'b0;
+    else if (fe_{{ i.up }}_hready) fe_{{ i.up }}_dp_{{ t }} <= HSEL_{{ t }} & HTRANS_{{ t }}[1];
+  assign HSEL_{{ t }}      = fe_{{ i.up }}_sel_{{ t }};
+  assign HADDR_{{ t }}     = HADDR_{{ i.up }};
+  // Shown while {{ i.up }}'s HREADY is high or {{ t }} is in its own (waited) data
+  // phase, when HREADYMUX_{{ t }} equals {{ i.up }}'s HREADY. Hidden while a shared-bus
+  // data phase stalls {{ i.up }}: {{ t }} would take the transfer early.
+  assign HTRANS_{{ t }}    = (fe_{{ i.up }}_sel_{{ t }} & (fe_{{ i.up }}_hready | fe_{{ i.up }}_dp_{{ t }})) ? HTRANS_{{ i.up }} : TRN_IDLE;
+  assign HWRITE_{{ t }}    = HWRITE_{{ i.up }};
+  assign HSIZE_{{ t }}     = HSIZE_{{ i.up }};
+  assign HBURST_{{ t }}    = HBURST_{{ i.up }};
+  assign HPROT_{{ t }}     = HPROT_{{ i.up }};
+  assign HWDATA_{{ t }}    = HWDATA_{{ i.up }};
+  assign HMASTLOCK_{{ t }} = HMASTLOCK_{{ i.up }};
+  assign HREADYMUX_{{ t }} = fe_{{ i.up }}_dp_{{ t }} ? HREADYOUT_{{ t }} : 1'b1;
+{% endfor %}
+{% else %}
+  // AHB-Lite initiator: always selected, its HREADY is its own HREADYOUT
+  assign HREADY_{{ i.up }} = s_{{ i.up }}_hreadyout;
+  assign HRESP_{{ i.up }}  = s_{{ i.up }}_hresp;
+  assign HRDATA_{{ i.up }} = s_{{ i.up }}_hrdata;
+{% endif %}
+{% endfor %}
+
+  // ---------------------------------------------------------------------------
+  // Shared bus
+  // ---------------------------------------------------------------------------
+  wire        b_hsel;
+  wire [31:0] b_haddr;
+  wire  [1:0] b_htrans;
+  wire        b_hwrite;
+  wire  [2:0] b_hsize;
+  wire  [2:0] b_hburst;
+  wire  [3:0] b_hprot;
+  wire        b_hmastlock;
+  wire [{{ data_width - 1 }}:0] b_hwdata;
+  wire        b_hready;          // bus HREADY, from the master mux
+  wire        b_hreadyout;       // selected target's HREADYOUT, from the slave mux
+  wire        b_hresp;
+  wire [{{ data_width - 1 }}:0] b_hrdata;
+  wire  [1:0] b_hmaster;         // address-phase master of u_master_mux
+{% if cascade %}
+
+  // Cascade: a second master mux feeds u_master_mux.S2
+  wire        c_hsel;
+  wire [31:0] c_haddr;
+  wire  [1:0] c_htrans;
+  wire        c_hwrite;
+  wire  [2:0] c_hsize;
+  wire  [2:0] c_hburst;
+  wire  [3:0] c_hprot;
+  wire        c_hmastlock;
+  wire [{{ data_width - 1 }}:0] c_hwdata;
+  wire        c_hready;
+  wire        c_hreadyout;
+  wire        c_hresp;
+  wire [{{ data_width - 1 }}:0] c_hrdata;
+  wire  [1:0] c_hmaster;
+{% endif %}
+{% macro mm_port(p, ports, mux) -%}
+{% set sel = ports | selectattr('port', 'equalto', p) | list %}
+{% if sel %}
+{% set i = sel[0] %}
+    .HSELS{{ p }}({{ ('fe_' ~ i.up ~ '_sel_shared') if i.front else "1'b1" }}), .HADDRS{{ p }}(HADDR_{{ i.up }}), .HTRANSS{{ p }}(HTRANS_{{ i.up }}),
+    .HSIZES{{ p }}(HSIZE_{{ i.up }}), .HWRITES{{ p }}(HWRITE_{{ i.up }}), .HREADYS{{ p }}({{ ('fe_' ~ i.up ~ '_hready') if i.front else ('s_' ~ i.up ~ '_hreadyout') }}),
+    .HPROTS{{ p }}(HPROT_{{ i.up }}), .HBURSTS{{ p }}(HBURST_{{ i.up }}), .HMASTLOCKS{{ p }}({{ ('HMASTLOCK_' ~ i.up ~ ' & (fe_' ~ i.up ~ '_sel_shared | ~HTRANS_' ~ i.up ~ '[1])') if i.front else ('HMASTLOCK_' ~ i.up) }}), .HWDATAS{{ p }}(HWDATA_{{ i.up }}),
+    .HREADYOUTS{{ p }}(s_{{ i.up }}_hreadyout), .HRESPS{{ p }}(s_{{ i.up }}_hresp), .HRDATAS{{ p }}(s_{{ i.up }}_hrdata),
+{% else %}
+    .HSELS{{ p }}(1'b0), .HADDRS{{ p }}(32'h0), .HTRANSS{{ p }}(TRN_IDLE), .HSIZES{{ p }}(3'b000), .HWRITES{{ p }}(1'b0),
+    .HREADYS{{ p }}(1'b1), .HPROTS{{ p }}(4'b0000), .HBURSTS{{ p }}(3'b000), .HMASTLOCKS{{ p }}(1'b0), .HWDATAS{{ p }}({{ data_width }}'h0),
+    .HREADYOUTS{{ p }}(nc_{{ mux }}_s{{ p }}_hreadyout), .HRESPS{{ p }}(nc_{{ mux }}_s{{ p }}_hresp), .HRDATAS{{ p }}(nc_{{ mux }}_s{{ p }}_hrdata),
+{% endif %}
+{%- endmacro %}
+{% macro mm_nc(ports, mux, nports) -%}
+{% for p in range(nports) if not (ports | selectattr('port', 'equalto', p) | list) %}
+  wire                  nc_{{ mux }}_s{{ p }}_hreadyout;   // disabled port, unused
+  wire                  nc_{{ mux }}_s{{ p }}_hresp;
+  wire [{{ data_width - 1 }}:0] nc_{{ mux }}_s{{ p }}_hrdata;
+{% endfor %}
+{%- endmacro %}
+{% if cascade %}
+{{ mm_nc(casc_ports, 'casc', 3) }}
+  cmsdk_ahb_master_mux #(
+    .PORT0_ENABLE({{ 1 if casc_ports | length > 0 else 0 }}), .PORT1_ENABLE({{ 1 if casc_ports | length > 1 else 0 }}), .PORT2_ENABLE({{ 1 if casc_ports | length > 2 else 0 }}), .DW({{ data_width }})
+  ) u_master_mux_casc (
+    .HCLK(HCLK), .HRESETn(HRESETn),
+{{ mm_port(0, casc_ports, 'casc') }}{{ mm_port(1, casc_ports, 'casc') }}{{ mm_port(2, casc_ports, 'casc') }}    .HSELM(c_hsel), .HADDRM(c_haddr), .HTRANSM(c_htrans), .HSIZEM(c_hsize),
+    .HWRITEM(c_hwrite), .HREADYM(c_hready), .HPROTM(c_hprot), .HBURSTM(c_hburst),
+    .HMASTLOCKM(c_hmastlock), .HWDATAM(c_hwdata),
+    .HREADYOUTM(c_hreadyout), .HRESPM(c_hresp), .HRDATAM(c_hrdata),
+    .HMASTERM(c_hmaster)
+  );
+{% endif %}
+{{ mm_nc(top_ports, 'top', 2 if cascade else 3) }}
+  cmsdk_ahb_master_mux #(
+    .PORT0_ENABLE({{ 1 if top_ports | length > 0 else 0 }}), .PORT1_ENABLE({{ 1 if top_ports | length > 1 else 0 }}), .PORT2_ENABLE({{ 1 if (cascade or top_ports | length > 2) else 0 }}), .DW({{ data_width }})
+  ) u_master_mux (
+    .HCLK(HCLK), .HRESETn(HRESETn),
+{{ mm_port(0, top_ports, 'top') }}{{ mm_port(1, top_ports, 'top') }}{% if cascade %}
+    .HSELS2(c_hsel), .HADDRS2(c_haddr), .HTRANSS2(c_htrans),
+    .HSIZES2(c_hsize), .HWRITES2(c_hwrite), .HREADYS2(c_hready),
+    .HPROTS2(c_hprot), .HBURSTS2(c_hburst), .HMASTLOCKS2(c_hmastlock), .HWDATAS2(c_hwdata),
+    .HREADYOUTS2(c_hreadyout), .HRESPS2(c_hresp), .HRDATAS2(c_hrdata),
+{% else %}
+{{ mm_port(2, top_ports, 'top') }}{% endif %}
+    .HSELM(b_hsel), .HADDRM(b_haddr), .HTRANSM(b_htrans), .HSIZEM(b_hsize),
+    .HWRITEM(b_hwrite), .HREADYM(b_hready), .HPROTM(b_hprot), .HBURSTM(b_hburst),
+    .HMASTLOCKM(b_hmastlock), .HWDATAM(b_hwdata),
+    .HREADYOUTM(b_hreadyout), .HRESPM(b_hresp), .HRDATAM(b_hrdata),
+    .HMASTERM(b_hmaster)
+  );
+
+  // ---------------------------------------------------------------------------
+  // Decoder, generated from the effective address maps
+  // ---------------------------------------------------------------------------
+  wire [{{ dec_w - 1 }}:0] b_dec_a = b_haddr[31:{{ dec_lsb }}];
+{% if keyed %}
+  // Keyed by u_master_mux's address-phase HMASTER (S0, S1, S2{{ ': the cascade' if cascade else '' }})
+{% endif %}
+{% for t in shared_targets %}
+  wire b_dec_{{ t }} =
+      {{ shared_exprs[t] }};
+{% endfor %}
+  wire b_dec_DEFAULT = ~({% for t in shared_targets %}b_dec_{{ t }}{{ ' | ' if not loop.last else '' }}{% endfor %}{% if not shared_targets %}1'b0{% endif %});
+  // HSEL is a pure address decode. The master mux's HSELM qualifies the
+  // transfer instead (in HTRANS below), so HSEL never toggles on its own.
+{% for t in shared_targets %}
+  assign HSEL_{{ t }} = b_dec_{{ t }};
+{% endfor %}
+  wire   b_hsel_DEFAULT = b_dec_DEFAULT;
+  wire [1:0] b_htrans_q = b_hsel ? b_htrans : TRN_IDLE;   // transfer, if a master is on the bus
+
+  // Unmapped addresses: ERROR response
+  wire   def_hreadyout;
+  wire   def_hresp;
+  cmsdk_ahb_default_slave u_default_slave (
+    .HCLK(HCLK), .HRESETn(HRESETn), .HSEL(b_hsel_DEFAULT), .HTRANS(b_htrans_q),
+    .HREADY(b_hready), .HREADYOUT(def_hreadyout), .HRESP(def_hresp)
+  );
+
+  cmsdk_ahb_slave_mux #(
+{% for p in range(10) %}
+    .PORT{{ p }}_ENABLE({{ 1 if p < slave_ports | length else 0 }}),
+{% endfor %}
+    .DW({{ data_width }})
+  ) u_slave_mux (
+    .HCLK(HCLK), .HRESETn(HRESETn), .HREADY(b_hready),
+{% for p in range(10) %}
+{% if p < shared_targets | length %}
+{% set t = shared_targets[p] %}
+    .HSEL{{ p }}(HSEL_{{ t }}), .HREADYOUT{{ p }}(HREADYOUT_{{ t }}), .HRESP{{ p }}(HRESP_{{ t }}), .HRDATA{{ p }}(HRDATA_{{ t }}),
+{% elif p == default_port %}
+    .HSEL{{ p }}(b_hsel_DEFAULT), .HREADYOUT{{ p }}(def_hreadyout), .HRESP{{ p }}(def_hresp), .HRDATA{{ p }}({{ data_width }}'h0),
+{% else %}
+    .HSEL{{ p }}(1'b0), .HREADYOUT{{ p }}(1'b1), .HRESP{{ p }}(1'b0), .HRDATA{{ p }}({{ data_width }}'h0),
+{% endif %}
+{% endfor %}
+    .HREADYOUT(b_hreadyout), .HRESP(b_hresp), .HRDATA(b_hrdata)
+  );
+{% for t in shared_targets %}
+
+  // Target {{ t }}: bus broadcast; HTRANS hidden only while another target stalls the bus
+  reg    b_dp_{{ t }};                      // {{ t }} is in its data phase
+  always @(posedge HCLK or negedge HRESETn)
+    if (!HRESETn)       b_dp_{{ t }} <= 1'b0;
+    else if (b_hready)  b_dp_{{ t }} <= HSEL_{{ t }} & HTRANS_{{ t }}[1];
+  assign HADDR_{{ t }}     = b_haddr;
+  assign HTRANS_{{ t }}    = (HSEL_{{ t }} & (b_hready | b_dp_{{ t }})) ? b_htrans_q : TRN_IDLE;
+  assign HWRITE_{{ t }}    = b_hwrite;
+  assign HSIZE_{{ t }}     = b_hsize;
+  assign HBURST_{{ t }}    = b_hburst;
+  assign HPROT_{{ t }}     = b_hprot;
+  assign HWDATA_{{ t }}    = b_hwdata;
+  assign HMASTLOCK_{{ t }} = b_hmastlock;
+  assign HREADYMUX_{{ t }} = b_dp_{{ t }} ? HREADYOUT_{{ t }} : 1'b1;
+{% endfor %}
+
+  // No flops of this module sit on a scan chain
+  assign SCANOUTHCLK = SCANINHCLK;
+
+  // Deliberately unused
+  wire unused = &{1'b0, SCANENABLE{% for b in remap_unused %}, REMAP[{{ b }}]{% endfor %}{% if not keyed %}, b_hmaster{% endif %}{% if cascade %}, c_hmaster{% endif %}{% for mux, ports, n in [('top', top_ports, 2 if cascade else 3), ('casc', casc_ports, 3 if cascade else 0)] %}{% for p in range(n) if not (ports | selectattr('port', 'equalto', p) | list) %},
+                     nc_{{ mux }}_s{{ p }}_hreadyout, nc_{{ mux }}_s{{ p }}_hresp, nc_{{ mux }}_s{{ p }}_hrdata{% endfor %}{% endfor %}};
+
+endmodule

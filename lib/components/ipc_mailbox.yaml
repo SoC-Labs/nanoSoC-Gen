@@ -1,0 +1,22 @@
+# Copyright 2026, SoC Labs (www.soclabs.org)
+# Droppable component package — inter-processor mailbox (configurator doc 06a).
+# Grounds: nanosoc-multicore-system/sys_desc/ipc_mbx_ahb.yaml (module ipc_mbx_ahb).
+component:
+  id: ipc_mailbox
+  module: ipc_mbx_ahb
+  category: peripheral
+  label: "IPC Mailbox"
+  desc: "Inter-processor communication mailbox: two message slots (one per
+    direction) with per-CPU interrupts, on an AHB slave port. Drop in to let
+    two CPU subsystems pass messages over a shared bus."
+  window_size: 4K
+  knobs:
+    # SLOT_DEPTH is the only size-bearing param. The mechanism needs at least
+    # one word per slot; the RTL wrapper is sized for short control messages.
+    - { param: SLOT_DEPTH, label: "Words per slot", kind: int,
+        default: 4, min: 1, max: 16,
+        desc: "Data words carried per mailbox slot (each direction)." }
+    - { param: APB_ADDR_W, label: "Register aperture", kind: addr_w,
+        default: 12, min: 12, max: 14,
+        desc: "APB register address width; the 4 KB (12-bit) default holds the
+          two data slots plus control/status registers." }
